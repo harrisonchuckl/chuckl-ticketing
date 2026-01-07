@@ -2336,6 +2336,13 @@ function setupVisualBuilder() {
       });
   }
 
+  canvas.addEventListener('click', (event) => {
+      const anchor = event.target.closest('a');
+      if (anchor && canvas.contains(anchor)) {
+          event.preventDefault();
+      }
+  });
+
     // 2. Sidebar Tab Switching
     const tabBtns = document.querySelectorAll('.ms-tab-btn');
     tabBtns.forEach(btn => {
@@ -2680,17 +2687,51 @@ function collectShowImages(show) {
         images.push({ url: clean, label });
     };
     addImage(show.imageUrl, 'Main image');
-    const additionalImages = Array.isArray(show.additionalImages) ? show.additionalImages : [];
+    const additionalImages = Array.isArray(show.additionalImages)
+        ? show.additionalImages
+        : Array.isArray(show.additionalImageUrls)
+            ? show.additionalImageUrls
+            : [];
     additionalImages.forEach((url, index) => addImage(url, `Supporting image ${index + 1}`));
     const nestedImages = Array.isArray(show.images) ? show.images : [];
     nestedImages.forEach((entry, index) => {
         if (typeof entry === 'string') {
             addImage(entry, `Supporting image ${index + 1}`);
         } else if (entry && typeof entry === 'object') {
-            addImage(entry.url, `Supporting image ${index + 1}`);
+            addImage(entry.url || entry.src || entry.imageUrl, `Supporting image ${index + 1}`);
         }
     });
     return images;
+}
+
+function ensureShowImages(showId) {
+    if (!showId) return Promise.resolve(null);
+    const existing = appState.shows.find((show) => show.id === showId);
+    if (
+        existing &&
+        (Object.prototype.hasOwnProperty.call(existing, 'additionalImages') ||
+            Object.prototype.hasOwnProperty.call(existing, 'images') ||
+            Object.prototype.hasOwnProperty.call(existing, 'additionalImageUrls'))
+    ) {
+        return Promise.resolve(existing);
+    }
+    if (existing && existing._imagesLoaded) {
+        return Promise.resolve(existing);
+    }
+    return fetchJson(`/admin/shows/${showId}`)
+        .then((data) => {
+            const item = data?.item || data;
+            if (!item) return existing || null;
+            const merged = existing ? Object.assign(existing, item) : { ...item };
+            merged._imagesLoaded = true;
+            if (!existing) appState.shows.push(merged);
+            return merged;
+        })
+        .catch((error) => {
+            console.warn('[marketing-suite] show image fetch failed', error);
+            if (existing) existing._imagesLoaded = true;
+            return existing || null;
+        });
 }
 
 function renderShowImageGrid(show, selectedUrl) {
@@ -3505,6 +3546,14 @@ function openBlockEditor(block) {
         const linkShowSelect = container.querySelector('#ms-image-link-show');
         const linkSelectedShowCheckbox = container.querySelector('#ms-image-link-selected-show');
 
+        const refreshShowGrid = (show, selectedUrl) => {
+            if (!showGrid) return;
+            showGrid.innerHTML = show
+                ? renderShowImageGrid(show, selectedUrl || block.content.showImageUrl || block.content.src)
+                : '<div class="ms-muted">Select a show to browse its images.</div>';
+            bindShowImageTiles();
+        };
+
         if (showSelect) showSelect.value = selectedShowId;
         if (linkShowSelect) linkShowSelect.value = linkShowId;
         if (linkInput && linkShowLink && !block.content.link) {
@@ -3607,16 +3656,18 @@ function openBlockEditor(block) {
             showSelect.addEventListener('change', () => {
                 block.content.showId = showSelect.value || '';
                 block.content.showImageUrl = '';
-                const show = appState.shows.find((item) => item.id === block.content.showId);
-                if (showGrid) {
-                    showGrid.innerHTML = show
-                        ? renderShowImageGrid(show, block.content.src)
-                        : '<div class="ms-muted">Select a show to browse its images.</div>';
-                }
+                const showId = block.content.showId;
+                const show = appState.shows.find((item) => item.id === showId);
                 if (linkSelectedShowCheckbox) {
                     linkSelectedShowCheckbox.checked = Boolean(show && block.content.linkShowId === show.id);
                 }
-                bindShowImageTiles();
+                if (!showId) {
+                    refreshShowGrid(null);
+                    return;
+                }
+                ensureShowImages(showId).then((loadedShow) => {
+                    refreshShowGrid(loadedShow || show, block.content.src);
+                });
             });
         }
 
@@ -3672,6 +3723,13 @@ function openBlockEditor(block) {
         }
 
         bindShowImageTiles();
+        if (selectedShowId) {
+            ensureShowImages(selectedShowId).then((loadedShow) => {
+                if (loadedShow && showGrid) {
+                    refreshShowGrid(loadedShow, block.content.showImageUrl || block.content.src);
+                }
+            });
+        }
     }
     else {
         container.innerHTML = `<div class="ms-muted">No settings available for this block type yet.</div>`;
