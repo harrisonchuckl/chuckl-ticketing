@@ -2225,6 +2225,21 @@ const FONT_FAMILY_MAP = {
     Georgia: 'Georgia, "Times New Roman", serif',
     'Times New Roman': '"Times New Roman", Times, serif',
     'Courier New': '"Courier New", Courier, monospace',
+    Roboto: '"Roboto", "Helvetica Neue", Arial, sans-serif',
+    'Open Sans': '"Open Sans", "Helvetica Neue", Arial, sans-serif',
+    Lato: '"Lato", "Helvetica Neue", Arial, sans-serif',
+    Montserrat: '"Montserrat", "Helvetica Neue", Arial, sans-serif',
+    Poppins: '"Poppins", "Helvetica Neue", Arial, sans-serif',
+    Raleway: '"Raleway", "Helvetica Neue", Arial, sans-serif',
+    'Playfair Display': '"Playfair Display", Georgia, serif',
+    Merriweather: '"Merriweather", Georgia, serif',
+    'Source Sans 3': '"Source Sans 3", "Helvetica Neue", Arial, sans-serif',
+    Nunito: '"Nunito", "Helvetica Neue", Arial, sans-serif',
+    Ubuntu: '"Ubuntu", "Helvetica Neue", Arial, sans-serif',
+    Oswald: '"Oswald", "Helvetica Neue", Arial, sans-serif',
+    'PT Sans': '"PT Sans", "Helvetica Neue", Arial, sans-serif',
+    'Work Sans': '"Work Sans", "Helvetica Neue", Arial, sans-serif',
+    'Fira Sans': '"Fira Sans", "Helvetica Neue", Arial, sans-serif',
 };
 
 // Helper to generate SVG data URI for placeholders
@@ -3061,6 +3076,21 @@ function openBlockEditor(block) {
                         <option value="Georgia">Georgia</option>
                         <option value="Times New Roman">Times New Roman</option>
                         <option value="Courier New">Courier New</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Open Sans">Open Sans</option>
+                        <option value="Lato">Lato</option>
+                        <option value="Montserrat">Montserrat</option>
+                        <option value="Poppins">Poppins</option>
+                        <option value="Raleway">Raleway</option>
+                        <option value="Playfair Display">Playfair Display</option>
+                        <option value="Merriweather">Merriweather</option>
+                        <option value="Source Sans 3">Source Sans 3</option>
+                        <option value="Nunito">Nunito</option>
+                        <option value="Ubuntu">Ubuntu</option>
+                        <option value="Oswald">Oswald</option>
+                        <option value="PT Sans">PT Sans</option>
+                        <option value="Work Sans">Work Sans</option>
+                        <option value="Fira Sans">Fira Sans</option>
                     </select>
                     <select class="ms-rte-select" data-rte-command="fontSize" aria-label="Font size">
                         <option value="12">12px</option>
@@ -3426,13 +3456,17 @@ function normalizeListAlignment(list, alignment) {
         list.style.marginLeft = '';
         list.style.marginRight = '';
         list.style.display = '';
+        list.style.width = '';
+        list.style.maxWidth = '';
     } else {
         list.style.listStylePosition = 'inside';
         list.style.paddingLeft = '0';
         list.style.paddingInlineStart = '0';
         list.style.marginLeft = 'auto';
         list.style.marginRight = alignment === 'right' ? '0' : 'auto';
-        list.style.display = 'table';
+        list.style.display = 'block';
+        list.style.width = 'fit-content';
+        list.style.maxWidth = '100%';
     }
     list.querySelectorAll('li').forEach((item) => {
         item.style.textAlign = alignment;
@@ -3441,11 +3475,13 @@ function normalizeListAlignment(list, alignment) {
             item.style.paddingLeft = '';
             item.style.marginLeft = '';
             item.style.marginRight = '';
+            item.style.width = '';
         } else {
             item.style.listStylePosition = 'inside';
             item.style.paddingLeft = '0';
             item.style.marginLeft = '0';
             item.style.marginRight = '0';
+            item.style.width = 'fit-content';
         }
     });
 }
