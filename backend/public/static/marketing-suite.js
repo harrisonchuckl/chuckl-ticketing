@@ -449,14 +449,189 @@ async function renderCampaigns() {
   }
 }
 
-function renderIntelligentCampaigns() {
+async function renderIntelligentCampaigns() {
   const main = document.getElementById('ms-main');
-  main.innerHTML = `
-    <div class="ms-card">
-      <h2>Intelligent Campaigns</h2>
-      <p class="ms-muted">Plan, personalize, and optimize multi-step campaigns from one place. Content coming soon.</p>
-    </div>
-  `;
+  main.innerHTML = '<div class="ms-card">Loading intelligent campaigns...</div>';
+
+  try {
+    const intelligentKinds = [
+      {
+        kind: 'MONTHLY_DIGEST',
+        label: 'Monthly digest',
+        description: 'Curated monthly picks based on past engagement.',
+      },
+      {
+        kind: 'NEW_ON_SALE_BATCH',
+        label: 'New on sale',
+        description: 'Freshly announced shows for your audience.',
+      },
+      {
+        kind: 'ALMOST_SOLD_OUT',
+        label: 'Almost sold out',
+        description: 'High-demand shows nearing capacity.',
+      },
+      {
+        kind: 'ADDON_UPSELL',
+        label: 'Addon upsell',
+        description: 'Suggested add-ons for recent purchasers.',
+      },
+    ];
+    const data = await fetchJson(`${API_BASE}/intelligent`);
+    const configs = data.items || [];
+    const configMap = new Map(configs.map((config) => [config.kind, config]));
+
+    main.innerHTML = `
+      <div class="ms-campaign-setup">
+        <div class="ms-campaign-form">
+          <div class="ms-card">
+            <div class="ms-toolbar" style="justify-content:space-between;">
+              <div>
+                <h2>Intelligent Campaigns</h2>
+                <div class="ms-muted">Preview automated campaign content for a specific contact.</div>
+              </div>
+            </div>
+          </div>
+          <div class="ms-card">
+            <h3>Contact</h3>
+            ${renderFormRow(
+              'Search contacts',
+              `<input id="ms-intelligent-contact-search" type="search" placeholder="Search by name or email" />`
+            )}
+            ${renderFormRow(
+              'Select contact',
+              `<select id="ms-intelligent-contact-select">
+                <option value="">Select a contact</option>
+              </select>`,
+              'Search results are pulled from your existing contacts list.'
+            )}
+          </div>
+          <div class="ms-card">
+            <h3>Campaign kinds</h3>
+            ${intelligentKinds
+              .map((item) => {
+                const config = configMap.get(item.kind);
+                const statusLabel = config?.templateId ? 'Configured' : 'Not configured';
+                return `
+                  <div class="ms-card" style="margin-top:12px;">
+                    <div class="ms-toolbar" style="justify-content:space-between;">
+                      <div>
+                        <strong>${escapeHtml(item.label)}</strong>
+                        <div class="ms-muted">${escapeHtml(item.description)}</div>
+                        <div class="ms-muted">Status: ${escapeHtml(statusLabel)}</div>
+                      </div>
+                      <button class="ms-secondary" data-intelligent-preview="${item.kind}">Preview</button>
+                    </div>
+                  </div>
+                `;
+              })
+              .join('')}
+          </div>
+        </div>
+        <div class="ms-campaign-preview">
+          <div class="ms-card">
+            <div class="ms-toolbar" style="justify-content:space-between;">
+              <div>
+                <h3>Preview</h3>
+                <div class="ms-muted">Rendered HTML preview for the selected campaign and contact.</div>
+              </div>
+            </div>
+            <div class="ms-preview-meta">
+              <div><span class="ms-muted">To</span><strong id="ms-intelligent-preview-to">—</strong></div>
+              <div><span class="ms-muted">Campaign</span><strong id="ms-intelligent-preview-kind">—</strong></div>
+              <div><span class="ms-muted">Eligibility</span><strong id="ms-intelligent-preview-eligibility">—</strong></div>
+            </div>
+            <div class="ms-preview-frame">
+              <iframe id="ms-intelligent-preview-frame" style="width:100%;height:420px;border:1px solid var(--ms-border);border-radius:12px;"></iframe>
+              <div class="ms-muted" id="ms-intelligent-preview-empty">Choose a campaign kind and contact to render a preview.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const searchInput = document.getElementById('ms-intelligent-contact-search');
+    const contactSelect = document.getElementById('ms-intelligent-contact-select');
+    const previewTo = document.getElementById('ms-intelligent-preview-to');
+    const previewKind = document.getElementById('ms-intelligent-preview-kind');
+    const previewEligibility = document.getElementById('ms-intelligent-preview-eligibility');
+    const previewFrame = document.getElementById('ms-intelligent-preview-frame');
+    const previewEmpty = document.getElementById('ms-intelligent-preview-empty');
+    let contactResults = [];
+    let selectedContactId = '';
+
+    function formatContactLabel(contact) {
+      const name = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+      return name ? `${contact.email} • ${name}` : contact.email;
+    }
+
+    function updateContactOptions(items) {
+      const previousSelection = selectedContactId;
+      contactSelect.innerHTML = `
+        <option value="">Select a contact</option>
+        ${items.map((contact) => `<option value="${contact.id}">${escapeHtml(formatContactLabel(contact))}</option>`).join('')}
+      `;
+      if (previousSelection && items.find((contact) => contact.id === previousSelection)) {
+        contactSelect.value = previousSelection;
+      }
+      updatePreviewContact();
+    }
+
+    function updatePreviewContact() {
+      const selected = contactResults.find((contact) => contact.id === selectedContactId);
+      previewTo.textContent = selected ? formatContactLabel(selected) : '—';
+    }
+
+    async function loadContacts(query) {
+      const url = query ? `${API_BASE}/contacts?q=${encodeURIComponent(query)}` : `${API_BASE}/contacts`;
+      const response = await fetchJson(url);
+      contactResults = response.items || [];
+      updateContactOptions(contactResults);
+    }
+
+    await loadContacts('');
+
+    searchInput.addEventListener('input', () => {
+      loadContacts(searchInput.value.trim());
+    });
+
+    contactSelect.addEventListener('change', () => {
+      selectedContactId = contactSelect.value;
+      updatePreviewContact();
+    });
+
+    main.querySelectorAll('[data-intelligent-preview]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const kind = button.getAttribute('data-intelligent-preview');
+        const kindLabel = intelligentKinds.find((item) => item.kind === kind)?.label || kind;
+        previewKind.textContent = kindLabel;
+
+        if (!selectedContactId) {
+          toast('Select a contact to preview this campaign.', 'warning');
+          return;
+        }
+
+        previewEmpty.style.display = 'none';
+        previewEligibility.textContent = 'Checking...';
+        try {
+          const preview = await fetchJson(`/api/marketing/intelligent/${kind}/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contactId: selectedContactId }),
+          });
+          previewFrame.srcdoc = preview.html || '';
+          previewEligibility.textContent = preview.meta?.reasons?.length ? 'Suppressed' : 'Eligible';
+        } catch (error) {
+          previewFrame.removeAttribute('srcdoc');
+          previewEmpty.style.display = 'block';
+          previewEligibility.textContent = '—';
+          toast(error.message || 'Preview failed', 'warning');
+        }
+      });
+    });
+  } catch (error) {
+    console.error('[marketing-suite] intelligent campaigns load failed', error);
+    showErrorState(main, "Couldn't load intelligent campaigns", error, renderIntelligentCampaigns);
+  }
 }
 
 async function renderCampaignCreate() {
