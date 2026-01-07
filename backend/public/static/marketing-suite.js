@@ -1130,7 +1130,8 @@ window.updateActiveTextColor = function(color) {
     if (!window.activeBlockId) return;
     const editor = document.getElementById('ms-text-editor');
     if (!editor) return;
-    editor.focus();
+    restoreRteSelection(editor);
+    document.execCommand('styleWithCSS', false, true);
     document.execCommand('foreColor', false, color);
     const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
     if (block && block.content) {
@@ -1144,7 +1145,8 @@ window.updateActiveTextHighlight = function(color) {
     if (!window.activeBlockId) return;
     const editor = document.getElementById('ms-text-editor');
     if (!editor) return;
-    editor.focus();
+    restoreRteSelection(editor);
+    document.execCommand('styleWithCSS', false, true);
     document.execCommand('hiliteColor', false, color);
     document.execCommand('backColor', false, color);
     const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
@@ -2181,6 +2183,7 @@ window.emailFooterState = {
 
 let draggedSource = null;
 let draggedBlockIndex = null;
+let savedRteSelection = null;
 
 // Helper to generate SVG data URI for placeholders
 function getPlaceholderImage(width, height) {
@@ -2877,6 +2880,16 @@ function openBlockEditor(block) {
             </div>
         `;
         const editor = container.querySelector('#ms-text-editor');
+        const saveSelection = () => {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) return;
+            const range = selection.getRangeAt(0);
+            if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return;
+            savedRteSelection = range.cloneRange();
+        };
+        editor.addEventListener('keyup', saveSelection);
+        editor.addEventListener('mouseup', saveSelection);
+        editor.addEventListener('focus', saveSelection);
         editor.addEventListener('input', () => {
             block.content.text = editor.innerHTML;
             renderBuilderCanvas();
@@ -2884,7 +2897,7 @@ function openBlockEditor(block) {
         container.querySelectorAll('button[data-rte-command]').forEach((button) => {
             button.addEventListener('click', () => {
                 const command = button.getAttribute('data-rte-command');
-                editor.focus();
+                restoreRteSelection(editor);
                 if (command === 'createLink') {
                     const url = prompt('Enter a URL');
                     if (url) document.execCommand('createLink', false, url);
@@ -2900,27 +2913,29 @@ function openBlockEditor(block) {
                     document.execCommand(command, false, null);
                     applyAlignment(editor, currentAlignment, { applyToAllOnCollapse: false });
                 } else {
+                    document.execCommand('styleWithCSS', false, true);
                     document.execCommand(command, false, null);
                 }
                 block.content.text = editor.innerHTML;
                 renderBuilderCanvas();
-                editor.focus();
+                saveSelection();
             });
         });
         container.querySelectorAll('select[data-rte-command]').forEach((select) => {
             select.addEventListener('change', (event) => {
                 const command = select.getAttribute('data-rte-command');
-                editor.focus();
+                restoreRteSelection(editor);
                 if (command === 'fontSize') {
                     const value = Number.parseInt(event.target.value, 10);
                     const sizeMap = { 12: 2, 14: 3, 16: 3, 18: 4, 24: 5, 32: 6 };
                     document.execCommand('fontSize', false, sizeMap[value] || 3);
                 } else {
+                    document.execCommand('styleWithCSS', false, true);
                     document.execCommand(command, false, event.target.value);
                 }
                 block.content.text = editor.innerHTML;
                 renderBuilderCanvas();
-                editor.focus();
+                saveSelection();
             });
         });
     }
@@ -3024,10 +3039,14 @@ function renderModernColorPicker(label, id, value, updateFunctionGlobalName) {
 const GRADIENT_PRESETS = [
     { name: 'Soft gray', start: '#111827', end: '#f9fafb', direction: 'to bottom' },
     { name: 'Slate haze', start: '#0f172a', end: '#94a3b8', direction: 'to bottom' },
+    { name: 'Warm stone', start: '#1f2937', end: '#e5e7eb', direction: 'to bottom' },
     { name: 'Misty blue', start: '#0ea5e9', end: '#e0f2fe', direction: 'to bottom' },
     { name: 'Lavender', start: '#6366f1', end: '#e0e7ff', direction: 'to bottom' },
+    { name: 'Sea glass', start: '#14b8a6', end: '#ccfbf1', direction: 'to bottom' },
     { name: 'Sunset', start: '#f97316', end: '#fde68a', direction: 'to right' },
+    { name: 'Rose glow', start: '#f43f5e', end: '#fecdd3', direction: 'to right' },
     { name: 'Vibrant purple', start: '#9333ea', end: '#f472b6', direction: '135deg' },
+    { name: 'Electric blue', start: '#2563eb', end: '#22d3ee', direction: '135deg' },
 ];
 
 const ALIGN_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, div, blockquote';
@@ -3041,6 +3060,7 @@ function setAllBlocksAlignment(editor, alignment) {
     if (blocks.length) {
         blocks.forEach((block) => {
             block.style.textAlign = alignment;
+            alignListItem(block, alignment);
         });
     } else {
         editor.style.textAlign = alignment;
@@ -3074,6 +3094,7 @@ function applyAlignment(editor, alignment, options = {}) {
     if (blocks.length) {
         blocks.forEach((block) => {
             block.style.textAlign = alignment;
+            alignListItem(block, alignment);
         });
     }
 }
@@ -3087,6 +3108,57 @@ function getAlignmentFromSelection(editor) {
     if (block && block.style.textAlign) return block.style.textAlign;
     if (block) return window.getComputedStyle(block).textAlign || 'left';
     return window.getComputedStyle(editor).textAlign || 'left';
+}
+
+function alignListItem(block, alignment) {
+    if (!block || !block.tagName) return;
+    const tag = block.tagName.toLowerCase();
+    if (tag === 'ul' || tag === 'ol') {
+        normalizeListAlignment(block, alignment);
+        return;
+    }
+    if (tag === 'li') {
+        const list = block.closest('ul, ol');
+        if (list) normalizeListAlignment(list, alignment);
+    }
+}
+
+function normalizeListAlignment(list, alignment) {
+    list.style.textAlign = alignment;
+    if (alignment === 'left') {
+        list.style.listStylePosition = '';
+        list.style.paddingLeft = '';
+        list.style.marginLeft = '';
+    } else {
+        list.style.listStylePosition = 'inside';
+        list.style.paddingLeft = '0';
+        list.style.marginLeft = '0';
+    }
+    list.querySelectorAll('li').forEach((item) => {
+        item.style.textAlign = alignment;
+        if (alignment === 'left') {
+            item.style.listStylePosition = '';
+            item.style.paddingLeft = '';
+            item.style.marginLeft = '';
+        } else {
+            item.style.listStylePosition = 'inside';
+            item.style.paddingLeft = '0';
+            item.style.marginLeft = '0';
+        }
+    });
+}
+
+function restoreRteSelection(editor) {
+    if (!editor) return;
+    if (!savedRteSelection) {
+        editor.focus();
+        return;
+    }
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(savedRteSelection);
+    editor.focus();
 }
 
 // Global handlers for the color picker

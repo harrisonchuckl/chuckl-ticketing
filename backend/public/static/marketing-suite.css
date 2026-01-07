@@ -370,7 +370,7 @@ body {
 }
 .ms-hex-input { border: none !important; padding: 4px !important; font-family: monospace; font-size: 13px; color: #334155; width: 100%; outline: none; }
 .ms-color-popover {
-    position: absolute; top: 100%; left: 0; width: 240px; background: white; border: 1px solid var(--ms-border);
+    position: absolute; top: 100%; right: 0; left: auto; width: 240px; background: white; border: 1px solid var(--ms-border);
     border-radius: 8px; padding: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 50;
     display: none; margin-top: 8px; overflow: hidden;
 }
