@@ -176,6 +176,91 @@ body {
   margin: 10px 20px;
   width: auto;
 }
+
+.ms-image-upload {
+  position: relative;
+}
+
+.ms-image-upload input[type="file"] {
+  display: none;
+}
+
+.ms-image-upload-drop {
+  border: 1px dashed var(--ms-border);
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ms-muted);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.ms-image-upload-drop strong {
+  color: var(--ms-text);
+  font-size: 14px;
+}
+
+.ms-image-upload-drop.is-dragover {
+  border-color: var(--ms-primary);
+  background: rgba(79, 70, 229, 0.08);
+  color: var(--ms-primary);
+}
+
+.ms-image-grid-wrapper {
+  margin-top: 10px;
+}
+
+.ms-image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ms-image-tile {
+  border: 1px solid var(--ms-border);
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--ms-text);
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.ms-image-tile img {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #f1f5f9;
+}
+
+.ms-image-tile.is-selected {
+  border-color: var(--ms-primary);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.ms-image-tile:hover {
+  transform: translateY(-1px);
+}
+
+.ms-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ms-text);
+}
 /* 5. THE BUILDER BLOCKS (MASTER SETTINGS) */
 .ms-builder-block {
   position: relative;
