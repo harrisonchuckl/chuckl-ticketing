@@ -1130,6 +1130,7 @@ window.updateActiveTextColor = function(color) {
     if (!window.activeBlockId) return;
     const editor = document.getElementById('ms-text-editor');
     if (!editor) return;
+    if (!savedRteSelection && !rteSelectionActive) return;
     restoreRteSelection(editor);
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('foreColor', false, color);
@@ -1145,6 +1146,7 @@ window.updateActiveTextHighlight = function(color) {
     if (!window.activeBlockId) return;
     const editor = document.getElementById('ms-text-editor');
     if (!editor) return;
+    if (!savedRteSelection && !rteSelectionActive) return;
     restoreRteSelection(editor);
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('hiliteColor', false, color);
@@ -2184,6 +2186,16 @@ window.emailFooterState = {
 let draggedSource = null;
 let draggedBlockIndex = null;
 let savedRteSelection = null;
+let rteCleanupHandler = null;
+let rteSelectionActive = false;
+
+const FONT_FAMILY_MAP = {
+    Arial: 'Arial, Helvetica, sans-serif',
+    Helvetica: 'Helvetica, Arial, sans-serif',
+    Georgia: 'Georgia, "Times New Roman", serif',
+    'Times New Roman': '"Times New Roman", Times, serif',
+    'Courier New': '"Courier New", Courier, monospace',
+};
 
 // Helper to generate SVG data URI for placeholders
 function getPlaceholderImage(width, height) {
@@ -2880,6 +2892,36 @@ function openBlockEditor(block) {
             </div>
         `;
         const editor = container.querySelector('#ms-text-editor');
+        window.activeTextEditor = editor;
+        const colorPickers = Array.from(container.querySelectorAll('.ms-color-picker-wrapper'));
+        const setColorPickerState = (enabled) => {
+            rteSelectionActive = Boolean(enabled);
+            colorPickers.forEach((picker) => {
+                picker.classList.toggle('is-disabled', !enabled);
+                picker.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+            });
+        };
+        const updateSelectionState = () => {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                setColorPickerState(false);
+                return;
+            }
+            const range = selection.getRangeAt(0);
+            const isInEditor = editor.contains(range.startContainer) && editor.contains(range.endContainer);
+            if (isInEditor && !selection.isCollapsed) {
+                savedRteSelection = range.cloneRange();
+                setColorPickerState(true);
+                return;
+            }
+            if (!isInEditor) {
+                setColorPickerState(false);
+            }
+        };
+        if (typeof rteCleanupHandler === 'function') {
+            rteCleanupHandler();
+            rteCleanupHandler = null;
+        }
         const saveSelection = () => {
             const selection = window.getSelection();
             if (!selection || selection.rangeCount === 0) return;
@@ -2887,9 +2929,27 @@ function openBlockEditor(block) {
             if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return;
             savedRteSelection = range.cloneRange();
         };
+        const handleSelectionChange = () => {
+            updateSelectionState();
+        };
+        const handleOutsideClick = (event) => {
+            if (!container.contains(event.target)) {
+                savedRteSelection = null;
+                setColorPickerState(false);
+            }
+        };
+        document.addEventListener('selectionchange', handleSelectionChange);
+        document.addEventListener('mousedown', handleOutsideClick);
+        rteCleanupHandler = () => {
+            document.removeEventListener('selectionchange', handleSelectionChange);
+            document.removeEventListener('mousedown', handleOutsideClick);
+            window.activeTextEditor = null;
+        };
+        setColorPickerState(false);
         editor.addEventListener('keyup', saveSelection);
         editor.addEventListener('mouseup', saveSelection);
         editor.addEventListener('focus', saveSelection);
+        editor.addEventListener('focus', updateSelectionState);
         editor.addEventListener('input', () => {
             block.content.text = editor.innerHTML;
             renderBuilderCanvas();
@@ -2930,12 +2990,14 @@ function openBlockEditor(block) {
                     const sizeMap = { 12: 2, 14: 3, 16: 3, 18: 4, 24: 5, 32: 6 };
                     document.execCommand('fontSize', false, sizeMap[value] || 3);
                 } else {
-                    document.execCommand('styleWithCSS', false, true);
-                    document.execCommand(command, false, event.target.value);
+                    const fontKey = event.target.value;
+                    const fontFamily = FONT_FAMILY_MAP[fontKey] || fontKey;
+                    applyFontFamily(editor, fontFamily);
                 }
                 block.content.text = editor.innerHTML;
                 renderBuilderCanvas();
                 saveSelection();
+                updateSelectionState();
             });
         });
     }
@@ -3128,11 +3190,17 @@ function normalizeListAlignment(list, alignment) {
     if (alignment === 'left') {
         list.style.listStylePosition = '';
         list.style.paddingLeft = '';
+        list.style.paddingInlineStart = '';
         list.style.marginLeft = '';
+        list.style.marginRight = '';
+        list.style.display = '';
     } else {
         list.style.listStylePosition = 'inside';
         list.style.paddingLeft = '0';
-        list.style.marginLeft = '0';
+        list.style.paddingInlineStart = '0';
+        list.style.marginLeft = 'auto';
+        list.style.marginRight = alignment === 'right' ? '0' : 'auto';
+        list.style.display = 'table';
     }
     list.querySelectorAll('li').forEach((item) => {
         item.style.textAlign = alignment;
@@ -3140,10 +3208,12 @@ function normalizeListAlignment(list, alignment) {
             item.style.listStylePosition = '';
             item.style.paddingLeft = '';
             item.style.marginLeft = '';
+            item.style.marginRight = '';
         } else {
             item.style.listStylePosition = 'inside';
             item.style.paddingLeft = '0';
             item.style.marginLeft = '0';
+            item.style.marginRight = '0';
         }
     });
 }
@@ -3161,17 +3231,52 @@ function restoreRteSelection(editor) {
     editor.focus();
 }
 
+function applyFontFamily(editor, fontFamily) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        editor.focus();
+        document.execCommand('fontName', false, fontFamily);
+        return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+        editor.focus();
+        document.execCommand('fontName', false, fontFamily);
+        return;
+    }
+    if (selection.isCollapsed) {
+        document.execCommand('fontName', false, fontFamily);
+        return;
+    }
+    const fragment = range.extractContents();
+    const span = document.createElement('span');
+    span.style.fontFamily = fontFamily;
+    span.appendChild(fragment);
+    range.insertNode(span);
+    selection.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.selectNodeContents(span);
+    selection.addRange(newRange);
+    savedRteSelection = newRange.cloneRange();
+}
+
 // Global handlers for the color picker
 window.toggleColorPopover = function(id) {
     // Close all others first
     document.querySelectorAll('.ms-color-popover').forEach(el => {
         if (el.id !== `popover-${id}`) el.classList.remove('open');
     });
+    if (id && id.startsWith('text-') && window.activeTextEditor && (rteSelectionActive || savedRteSelection)) {
+        restoreRteSelection(window.activeTextEditor);
+    }
     const popover = document.getElementById(`popover-${id}`);
     if (popover) popover.classList.toggle('open');
 };
 
 window.pickColor = function(id, color, updateFnName) {
+    if (id && id.startsWith('text-') && window.activeTextEditor && (rteSelectionActive || savedRteSelection)) {
+        restoreRteSelection(window.activeTextEditor);
+    }
     const input = document.getElementById(`input-${id}`);
     const preview = document.getElementById(`preview-${id}`);
     const popover = document.getElementById(`popover-${id}`);
@@ -3190,6 +3295,9 @@ window.manualHexUpdate = function(id, color, updateFnName) {
     if (!color.startsWith('#')) color = '#' + color;
     const preview = document.getElementById(`preview-${id}`);
     if (preview) preview.style.backgroundColor = color;
+    if (id && id.startsWith('text-') && window.activeTextEditor && (rteSelectionActive || savedRteSelection)) {
+        restoreRteSelection(window.activeTextEditor);
+    }
     
     if (typeof window[updateFnName] === 'function') {
         window[updateFnName](color);

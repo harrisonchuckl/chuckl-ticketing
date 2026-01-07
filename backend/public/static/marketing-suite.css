@@ -363,6 +363,10 @@ body {
 
 /* MODERN COLOR PICKER STYLES */
 .ms-color-picker-wrapper { position: relative; overflow: visible; }
+.ms-color-picker-wrapper.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
 .ms-color-input-group { display: flex; align-items: center; gap: 8px; border: 1px solid var(--ms-border); padding: 4px; border-radius: 8px; background: white; }
 .ms-color-preview {
     width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ddd; cursor: pointer; flex-shrink: 0;
