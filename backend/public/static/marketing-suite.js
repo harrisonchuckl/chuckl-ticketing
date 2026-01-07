@@ -986,9 +986,9 @@ async function renderTemplateEditor(templateId) {
       </div>
 
       <div id="ms-block-editor" class="ms-sidebar-panel hidden">
-        <div class="ms-toolbar" style="margin-bottom:10px;">
+        <div class="ms-toolbar ms-block-editor-header" style="margin-bottom:10px;">
             <button class="ms-secondary small" id="ms-back-to-blocks">← Back</button>
-            <strong>Edit Block</strong>
+            <div class="ms-block-editor-title" id="ms-block-editor-title">Edit Block</div>
         </div>
         <div id="ms-active-block-settings"></div>
       </div>
@@ -1113,6 +1113,35 @@ window.updateActiveBlockColor = function(color) {
             block.content.color = color;
             renderBuilderCanvas();
         }
+    }
+};
+
+window.updateActiveTextColor = function(color) {
+    if (!window.activeBlockId) return;
+    const editor = document.getElementById('ms-text-editor');
+    if (!editor) return;
+    editor.focus();
+    document.execCommand('foreColor', false, color);
+    const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+    if (block && block.content) {
+        block.content.color = color;
+        block.content.text = editor.innerHTML;
+        renderBuilderCanvas();
+    }
+};
+
+window.updateActiveTextHighlight = function(color) {
+    if (!window.activeBlockId) return;
+    const editor = document.getElementById('ms-text-editor');
+    if (!editor) return;
+    editor.focus();
+    document.execCommand('hiliteColor', false, color);
+    document.execCommand('backColor', false, color);
+    const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+    if (block && block.content) {
+        block.content.highlightColor = color;
+        block.content.text = editor.innerHTML;
+        renderBuilderCanvas();
     }
 };
     
@@ -2609,7 +2638,23 @@ window.deleteBlock = function(id) {
     document.getElementById('ms-sidebar-blocks').classList.add('active');
 }
 
+function getBlockTypeLabel(type) {
+    const labels = {
+        boxedtext: 'Boxed Text',
+        imagegroup: 'Image Group',
+        imagecard: 'Image Card',
+    };
+    if (!type) return 'Block';
+    return labels[type] || `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
+}
+
+function updateBlockEditorTitle(title) {
+    const titleEl = document.getElementById('ms-block-editor-title');
+    if (titleEl) titleEl.textContent = title;
+}
+
 function openBlockEditor(block) {
+    updateBlockEditorTitle(getBlockTypeLabel(block.type));
     // 1. Ensure all other panels are hidden specifically
     document.querySelectorAll('.ms-sidebar-panel').forEach(p => {
         p.classList.remove('active');
@@ -2707,15 +2752,84 @@ function openBlockEditor(block) {
     }
     // --- TEXT EDITOR ---
     else if (block.type === 'text') {
+        const textColor = block.content.color || '#0f172a';
+        const highlightColor = block.content.highlightColor || '#ffffff';
         container.innerHTML = `
             <div class="ms-field">
-                <label>Content (HTML allowed)</label>
-                <textarea id="edit-text-val" rows="10" style="width:100%; border-radius:8px; border:1px solid #e2e8f0; padding:10px;">${block.content.text}</textarea>
+                <label>Content</label>
+                <div class="ms-rte-toolbar">
+                    <button class="ms-rte-btn" type="button" data-rte-command="bold" title="Bold"><strong>B</strong></button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="italic" title="Italic"><em>I</em></button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="underline" title="Underline"><span style="text-decoration:underline;">U</span></button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="strikeThrough" title="Strikethrough"><span style="text-decoration:line-through;">S</span></button>
+                    <span class="ms-rte-divider"></span>
+                    <button class="ms-rte-btn" type="button" data-rte-command="insertUnorderedList" title="Bulleted list">• List</button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="insertOrderedList" title="Numbered list">1. List</button>
+                    <span class="ms-rte-divider"></span>
+                    <button class="ms-rte-btn" type="button" data-rte-command="justifyLeft" title="Align left">↤</button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="justifyCenter" title="Align center">↔</button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="justifyRight" title="Align right">↦</button>
+                    <span class="ms-rte-divider"></span>
+                    <button class="ms-rte-btn" type="button" data-rte-command="createLink" title="Insert link">🔗</button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="removeFormat" title="Clear formatting">✕</button>
+                    <select class="ms-rte-select" data-rte-command="fontName" aria-label="Font family">
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Courier New">Courier New</option>
+                    </select>
+                    <select class="ms-rte-select" data-rte-command="fontSize" aria-label="Font size">
+                        <option value="12">12px</option>
+                        <option value="14">14px</option>
+                        <option value="16" selected>16px</option>
+                        <option value="18">18px</option>
+                        <option value="24">24px</option>
+                        <option value="32">32px</option>
+                    </select>
+                </div>
+                <div id="ms-text-editor" class="ms-rte-editor" contenteditable="true">${block.content.text || ''}</div>
+            </div>
+            <div class="ms-rte-color-row">
+                ${renderModernColorPicker('Text Color', 'text-color', textColor, 'updateActiveTextColor')}
+                ${renderModernColorPicker('Highlight Color', 'text-highlight', highlightColor, 'updateActiveTextHighlight')}
             </div>
         `;
-        container.querySelector('#edit-text-val').addEventListener('input', (e) => {
-            block.content.text = e.target.value;
+        const editor = container.querySelector('#ms-text-editor');
+        editor.addEventListener('input', () => {
+            block.content.text = editor.innerHTML;
             renderBuilderCanvas();
+        });
+        container.querySelectorAll('[data-rte-command]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const command = button.getAttribute('data-rte-command');
+                editor.focus();
+                if (command === 'createLink') {
+                    const url = prompt('Enter a URL');
+                    if (url) document.execCommand('createLink', false, url);
+                } else {
+                    document.execCommand(command, false, null);
+                }
+                block.content.text = editor.innerHTML;
+                renderBuilderCanvas();
+                editor.focus();
+            });
+        });
+        container.querySelectorAll('select[data-rte-command]').forEach((select) => {
+            select.addEventListener('change', (event) => {
+                const command = select.getAttribute('data-rte-command');
+                editor.focus();
+                if (command === 'fontSize') {
+                    const value = Number.parseInt(event.target.value, 10);
+                    const sizeMap = { 12: 2, 14: 3, 16: 3, 18: 4, 24: 5, 32: 6 };
+                    document.execCommand('fontSize', false, sizeMap[value] || 3);
+                } else {
+                    document.execCommand(command, false, event.target.value);
+                }
+                block.content.text = editor.innerHTML;
+                renderBuilderCanvas();
+                editor.focus();
+            });
         });
     }
     // --- BUTTON EDITOR ---
@@ -2747,6 +2861,7 @@ function openFooterEditor() {
     const editorPanel = document.getElementById('ms-block-editor');
     editorPanel.classList.remove('hidden');
     editorPanel.classList.add('active');
+    updateBlockEditorTitle('Footer');
 
     const container = document.getElementById('ms-active-block-settings');
     container.innerHTML = `
