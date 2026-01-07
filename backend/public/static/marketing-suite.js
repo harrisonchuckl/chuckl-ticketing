@@ -2629,7 +2629,15 @@ case 'strip': return {
 };
       case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
-        case 'image': return { src: placeholderLarge, alt: 'Image', link: '' };
+        case 'image':
+            return {
+                src: placeholderLarge,
+                alt: 'Image',
+                link: '',
+                showId: '',
+                showImageUrl: '',
+                linkShowId: '',
+            };
         case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
         case 'imagecard': return { src: placeholderLarge, caption: '<p style="margin-top:10px;">Image caption goes here.</p>' };
         case 'button': return { label: 'Click Here', url: 'https://', color: '#4f46e5', align: 'center' };
@@ -2646,6 +2654,73 @@ case 'strip': return {
         case 'product': return { productId: null, title: 'Product Name', price: '£0.00' };
         default: return {};
     }
+}
+
+function getShowLink(show) {
+    if (!show) return '';
+    const storefrontSlug = show.organiser?.storefrontSlug || '';
+    const slug = show.slug || '';
+    if (storefrontSlug && slug) {
+        return `/public/${storefrontSlug}/${slug}`;
+    }
+    if (show.id) {
+        return `/public/event/${show.id}`;
+    }
+    return '';
+}
+
+function collectShowImages(show) {
+    if (!show) return [];
+    const images = [];
+    const seen = new Set();
+    const addImage = (url, label) => {
+        const clean = String(url || '').trim();
+        if (!clean || seen.has(clean)) return;
+        seen.add(clean);
+        images.push({ url: clean, label });
+    };
+    addImage(show.imageUrl, 'Main image');
+    const additionalImages = Array.isArray(show.additionalImages) ? show.additionalImages : [];
+    additionalImages.forEach((url, index) => addImage(url, `Supporting image ${index + 1}`));
+    const nestedImages = Array.isArray(show.images) ? show.images : [];
+    nestedImages.forEach((entry, index) => {
+        if (typeof entry === 'string') {
+            addImage(entry, `Supporting image ${index + 1}`);
+        } else if (entry && typeof entry === 'object') {
+            addImage(entry.url, `Supporting image ${index + 1}`);
+        }
+    });
+    return images;
+}
+
+function renderShowImageGrid(show, selectedUrl) {
+    const images = collectShowImages(show);
+    if (!images.length) {
+        return '<div class="ms-muted">No show images available yet.</div>';
+    }
+    const safeSelected = selectedUrl || '';
+    return `
+        <div class="ms-image-grid">
+            ${images
+                .map((image) => {
+                    const selected = image.url === safeSelected ? 'is-selected' : '';
+                    return `
+                        <button type="button" class="ms-image-tile ${selected}" data-image-url="${escapeHtml(image.url)}">
+                            <img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.label)}" />
+                            <span>${escapeHtml(image.label)}</span>
+                        </button>
+                    `;
+                })
+                .join('')}
+        </div>
+    `;
+}
+
+function readImageFile(file, callback) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => callback(reader.result);
+    reader.readAsDataURL(file);
 }
 
 /**
@@ -2875,7 +2950,13 @@ function getPreviewHtml(block) {
     switch(block.type) {
         case 'text': return `<div>${c.text}</div>`;
         case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
-        case 'image': return `<img src="${c.src}" style="width:100%; display:block;">`;
+        case 'image': {
+            const imageHtml = `<img src="${escapeHtml(c.src)}" alt="${escapeHtml(c.alt || '')}" style="width:100%; display:block;">`;
+            if (c.link) {
+                return `<a href="${escapeHtml(c.link)}" target="_blank" rel="noopener noreferrer">${imageHtml}</a>`;
+            }
+            return imageHtml;
+        }
         case 'imagegroup': 
             return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 ${c.images.map(img => `<img src="${img.src}" style="width:100%;">`).join('')}
@@ -3358,15 +3439,239 @@ function openBlockEditor(block) {
     }
     // --- IMAGE EDITOR ---
     else if (block.type === 'image') {
+        const showOptions = appState.shows
+            .map((show) => `<option value="${show.id}">${escapeHtml(show.title)}</option>`)
+            .join('');
+        const selectedShowId = block.content.showId || '';
+        const selectedShow = appState.shows.find((show) => show.id === selectedShowId);
+        const linkShowId = block.content.linkShowId || '';
+        const linkShow = appState.shows.find((show) => show.id === linkShowId);
+        const selectedShowLink = selectedShow ? getShowLink(selectedShow) : '';
+        const linkShowLink = linkShow ? getShowLink(linkShow) : '';
+        const showImageGrid = selectedShow
+            ? renderShowImageGrid(selectedShow, block.content.showImageUrl || block.content.src)
+            : '<div class="ms-muted">Select a show to browse its images.</div>';
+
         container.innerHTML = `
-            <div class="ms-field"><label>Image URL</label><input id="edit-img-src" value="${block.content.src}"></div>
-            <div class="ms-field"><label>Alt Text</label><input id="edit-img-alt" value="${block.content.alt}"></div>
+            <div class="ms-field">
+                <label>Upload image</label>
+                <div class="ms-image-upload">
+                    <input type="file" id="ms-image-upload-input" accept="image/*" />
+                    <div class="ms-image-upload-drop" id="ms-image-upload-drop">
+                        <strong>Drop image here</strong>
+                        <span>or click to upload</span>
+                    </div>
+                </div>
+            </div>
+            <div class="ms-field">
+                <label>Image URL</label>
+                <input id="edit-img-src" value="${escapeHtml(block.content.src)}">
+                <div class="ms-muted">Paste a public image URL, or upload above.</div>
+            </div>
+            <div class="ms-field"><label>Alt Text</label><input id="edit-img-alt" value="${escapeHtml(block.content.alt)}"></div>
+            <div class="ms-field">
+                <label>Show images</label>
+                <select id="ms-image-show-select">
+                    <option value="">Select show</option>
+                    ${showOptions}
+                </select>
+                <div id="ms-image-show-grid" class="ms-image-grid-wrapper">${showImageGrid}</div>
+                <label class="ms-checkbox-row">
+                    <input type="checkbox" id="ms-image-link-selected-show" ${selectedShowId && block.content.linkShowId === selectedShowId ? 'checked' : ''}>
+                    Link image to selected show
+                </label>
+            </div>
+            <div class="ms-field">
+                <label>Link URL</label>
+                <input id="edit-img-link" value="${escapeHtml(block.content.link || '')}" placeholder="https://example.com">
+            </div>
+            <div class="ms-field">
+                <label>Link to show</label>
+                <select id="ms-image-link-show">
+                    <option value="">No show link</option>
+                    ${showOptions}
+                </select>
+                <div class="ms-muted">Select a show to auto-fill the link URL.</div>
+            </div>
         `;
-        container.querySelector('#edit-img-src').addEventListener('input', (e) => {
-            block.content.src = e.target.value;
+
+        const uploadInput = container.querySelector('#ms-image-upload-input');
+        const uploadDrop = container.querySelector('#ms-image-upload-drop');
+        const imageSrcInput = container.querySelector('#edit-img-src');
+        const imageAltInput = container.querySelector('#edit-img-alt');
+        const showSelect = container.querySelector('#ms-image-show-select');
+        const showGrid = container.querySelector('#ms-image-show-grid');
+        const linkInput = container.querySelector('#edit-img-link');
+        const linkShowSelect = container.querySelector('#ms-image-link-show');
+        const linkSelectedShowCheckbox = container.querySelector('#ms-image-link-selected-show');
+
+        if (showSelect) showSelect.value = selectedShowId;
+        if (linkShowSelect) linkShowSelect.value = linkShowId;
+        if (linkInput && linkShowLink && !block.content.link) {
+            linkInput.value = linkShowLink;
+            block.content.link = linkShowLink;
+        }
+
+        const syncImagePreview = () => {
             recordEditorHistory({ immediate: false });
             renderBuilderCanvas();
-        });
+        };
+
+        const handleImageSelection = (url, { fromShow = false } = {}) => {
+            block.content.src = url;
+            if (fromShow) {
+                block.content.showImageUrl = url;
+            } else {
+                block.content.showId = '';
+                block.content.showImageUrl = '';
+                if (showSelect) showSelect.value = '';
+            }
+            if (!block.content.alt) {
+                block.content.alt = 'Email image';
+                if (imageAltInput) imageAltInput.value = block.content.alt;
+            }
+            if (imageSrcInput) imageSrcInput.value = url;
+            syncImagePreview();
+        };
+
+        const bindShowImageTiles = () => {
+            if (!showGrid) return;
+            showGrid.querySelectorAll('[data-image-url]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const url = button.getAttribute('data-image-url');
+                    if (!url) return;
+                    handleImageSelection(url, { fromShow: true });
+                    block.content.showId = showSelect ? showSelect.value : '';
+                    const show = appState.shows.find((item) => item.id === block.content.showId);
+                    if (show && !block.content.alt) {
+                        block.content.alt = show.title || 'Show image';
+                        if (imageAltInput) imageAltInput.value = block.content.alt;
+                    }
+                    if (linkSelectedShowCheckbox?.checked && show) {
+                        const showLink = getShowLink(show);
+                        block.content.link = showLink;
+                        block.content.linkShowId = show.id;
+                        if (linkInput) linkInput.value = showLink;
+                        if (linkShowSelect) linkShowSelect.value = show.id;
+                    }
+                    syncImagePreview();
+                });
+            });
+        };
+
+        if (uploadDrop && uploadInput) {
+            uploadDrop.addEventListener('click', () => uploadInput.click());
+            uploadDrop.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                uploadDrop.classList.add('is-dragover');
+            });
+            uploadDrop.addEventListener('dragleave', () => {
+                uploadDrop.classList.remove('is-dragover');
+            });
+            uploadDrop.addEventListener('drop', (event) => {
+                event.preventDefault();
+                uploadDrop.classList.remove('is-dragover');
+                const file = event.dataTransfer.files?.[0];
+                if (file) {
+                    readImageFile(file, (result) => {
+                        if (typeof result === 'string') handleImageSelection(result);
+                    });
+                }
+            });
+            uploadInput.addEventListener('change', (event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                    readImageFile(file, (result) => {
+                        if (typeof result === 'string') handleImageSelection(result);
+                    });
+                }
+            });
+        }
+
+        if (imageSrcInput) {
+            imageSrcInput.addEventListener('input', (e) => {
+                block.content.src = e.target.value;
+                block.content.showImageUrl = '';
+                syncImagePreview();
+            });
+        }
+
+        if (imageAltInput) {
+            imageAltInput.addEventListener('input', (e) => {
+                block.content.alt = e.target.value;
+                syncImagePreview();
+            });
+        }
+
+        if (showSelect) {
+            showSelect.addEventListener('change', () => {
+                block.content.showId = showSelect.value || '';
+                block.content.showImageUrl = '';
+                const show = appState.shows.find((item) => item.id === block.content.showId);
+                if (showGrid) {
+                    showGrid.innerHTML = show
+                        ? renderShowImageGrid(show, block.content.src)
+                        : '<div class="ms-muted">Select a show to browse its images.</div>';
+                }
+                if (linkSelectedShowCheckbox) {
+                    linkSelectedShowCheckbox.checked = Boolean(show && block.content.linkShowId === show.id);
+                }
+                bindShowImageTiles();
+            });
+        }
+
+        if (linkInput) {
+            linkInput.addEventListener('input', (e) => {
+                block.content.link = e.target.value;
+                const currentLinkShow = appState.shows.find((item) => item.id === block.content.linkShowId);
+                if (currentLinkShow && getShowLink(currentLinkShow) !== block.content.link) {
+                    block.content.linkShowId = '';
+                    if (linkShowSelect) linkShowSelect.value = '';
+                    if (linkSelectedShowCheckbox) linkSelectedShowCheckbox.checked = false;
+                }
+                syncImagePreview();
+            });
+        }
+
+        if (linkShowSelect) {
+            linkShowSelect.addEventListener('change', () => {
+                const show = appState.shows.find((item) => item.id === linkShowSelect.value);
+                if (show) {
+                    const showLink = getShowLink(show);
+                    block.content.link = showLink;
+                    block.content.linkShowId = show.id;
+                    if (linkInput) linkInput.value = showLink;
+                } else {
+                    block.content.linkShowId = '';
+                }
+                if (linkSelectedShowCheckbox) {
+                    linkSelectedShowCheckbox.checked = Boolean(show && show.id === block.content.showId);
+                }
+                syncImagePreview();
+            });
+        }
+
+        if (linkSelectedShowCheckbox) {
+            linkSelectedShowCheckbox.addEventListener('change', () => {
+                const show = appState.shows.find((item) => item.id === (showSelect ? showSelect.value : ''));
+                if (!show) {
+                    linkSelectedShowCheckbox.checked = false;
+                    return;
+                }
+                if (linkSelectedShowCheckbox.checked) {
+                    const showLink = getShowLink(show);
+                    block.content.link = showLink;
+                    block.content.linkShowId = show.id;
+                    if (linkInput) linkInput.value = showLink;
+                    if (linkShowSelect) linkShowSelect.value = show.id;
+                } else if (block.content.linkShowId === show.id) {
+                    block.content.linkShowId = '';
+                }
+                syncImagePreview();
+            });
+        }
+
+        bindShowImageTiles();
     }
     else {
         container.innerHTML = `<div class="ms-muted">No settings available for this block type yet.</div>`;
