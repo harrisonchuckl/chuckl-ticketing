@@ -2952,13 +2952,21 @@ function openBlockEditor(block) {
         const updateSelectionState = () => {
             const selection = window.getSelection();
             if (!selection || selection.rangeCount === 0) {
-                setColorPickerState(false);
+                setColorPickerState(Boolean(savedRteSelection));
                 return;
             }
             const range = selection.getRangeAt(0);
             const isInEditor = editor.contains(range.startContainer) && editor.contains(range.endContainer);
+            const hasSavedSelection =
+                savedRteSelection &&
+                editor.contains(savedRteSelection.startContainer) &&
+                editor.contains(savedRteSelection.endContainer);
             if (isInEditor && !selection.isCollapsed) {
                 savedRteSelection = range.cloneRange();
+                setColorPickerState(true);
+                return;
+            }
+            if (hasSavedSelection) {
                 setColorPickerState(true);
                 return;
             }
@@ -3299,28 +3307,43 @@ function restoreRteSelection(editor) {
     editor.focus();
 }
 
+function getPrimaryFontFamily(fontFamily) {
+    if (!fontFamily) return '';
+    const primary = fontFamily.split(',')[0]?.trim() || fontFamily;
+    return primary.replace(/^['"]|['"]$/g, '');
+}
+
 function applyFontFamily(editor, fontFamily) {
     const selection = window.getSelection();
+    const primaryFont = getPrimaryFontFamily(fontFamily);
     if (!selection || selection.rangeCount === 0) {
         editor.focus();
-        document.execCommand('fontName', false, fontFamily);
+        document.execCommand('styleWithCSS', false, true);
+        document.execCommand('fontName', false, primaryFont || fontFamily);
         return;
     }
     const range = selection.getRangeAt(0);
-    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+    const activeRange =
+        editor.contains(range.startContainer) && editor.contains(range.endContainer)
+            ? range
+            : savedRteSelection;
+    if (!activeRange) {
         editor.focus();
-        document.execCommand('fontName', false, fontFamily);
+        document.execCommand('styleWithCSS', false, true);
+        document.execCommand('fontName', false, primaryFont || fontFamily);
         return;
     }
-    if (selection.isCollapsed) {
-        document.execCommand('fontName', false, fontFamily);
+    if (activeRange.collapsed) {
+        editor.focus();
+        document.execCommand('styleWithCSS', false, true);
+        document.execCommand('fontName', false, primaryFont || fontFamily);
         return;
     }
-    const fragment = range.extractContents();
+    const fragment = activeRange.extractContents();
     const span = document.createElement('span');
     span.style.fontFamily = fontFamily;
     span.appendChild(fragment);
-    range.insertNode(span);
+    activeRange.insertNode(span);
     selection.removeAllRanges();
     const newRange = document.createRange();
     newRange.selectNodeContents(span);
