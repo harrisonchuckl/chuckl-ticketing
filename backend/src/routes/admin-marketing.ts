@@ -73,6 +73,7 @@ import { buildRecommendedShowsHtml as buildIntelligentShowsHtml } from '../servi
 import { countIntelligentSendsLast30d, hasEmailedShowRecently } from '../services/marketing/intelligent/eligibility.js';
 import { getTenantUpcomingShows, rankShowsForContact } from '../services/marketing/intelligent/recommendations.js';
 import { hasPurchasedShow } from '../services/marketing/intelligent/suppression.js';
+import { resolveIntelligentConfig, runIntelligentCampaign } from '../services/marketing/intelligent/runner.js';
 const router = Router();
 const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
@@ -753,23 +754,6 @@ function isValidEmail(email: string) {
   return Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
 }
 
-function resolveIntelligentConfig(configJson: Prisma.JsonValue | null | undefined) {
-  const fallback = { horizonDays: 90, limit: 6, cooldownDays: 30 };
-  if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) {
-    return fallback;
-  }
-  const config = configJson as Record<string, any>;
-  const horizonDaysRaw = config.recommendationHorizonDays ?? config.horizonDays ?? config.lookaheadDays;
-  const limitRaw = config.recommendationLimit ?? config.limit ?? config.maxRecommendations;
-  const cooldownDaysRaw = config.showCooldownDays ?? config.cooldownDays ?? config.recommendationCooldownDays;
-  const horizonDays = Number.isFinite(Number(horizonDaysRaw)) ? Math.max(1, Number(horizonDaysRaw)) : fallback.horizonDays;
-  const limit = Number.isFinite(Number(limitRaw)) ? Math.max(1, Number(limitRaw)) : fallback.limit;
-  const cooldownDays = Number.isFinite(Number(cooldownDaysRaw))
-    ? Math.max(0, Number(cooldownDaysRaw))
-    : fallback.cooldownDays;
-  return { horizonDays, limit, cooldownDays };
-}
-
 function canOverrideTenant(req: any) {
   const role = String(req.user?.role || '').trim().toUpperCase();
   return role === 'ADMIN' || isOwnerEmail(req.user?.email);
@@ -1153,286 +1137,26 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
   }
   const dryRun = req.body?.dryRun !== false;
 
-  const config = await prisma.marketingIntelligentCampaign.findFirst({
-    where: { tenantId, kind },
-    include: { template: true },
+  const runResult = await runIntelligentCampaign({
+    tenantId,
+    kind,
+    dryRun,
+    actorUserId: req.user?.id || null,
+    actorEmail: req.user?.email || null,
   });
-  if (!config || !config.template) {
-    return res.status(404).json({ ok: false, message: 'Intelligent campaign not configured.' });
-  }
-
-  const tenant = await prisma.user.findUnique({
-    where: { id: tenantId },
-    select: { tradingName: true, companyName: true, name: true, storefrontSlug: true, id: true },
-  });
-  if (!tenant) return res.status(404).json({ ok: false, message: 'Tenant not found' });
-
-  const contacts = await prisma.marketingContact.findMany({
-    where: { tenantId },
-    include: { consents: { orderBy: { createdAt: 'desc' } } },
-  });
-  const suppressions = await prisma.marketingSuppression.findMany({
-    where: { tenantId },
-    select: { email: true, type: true },
-  });
-  const suppressionMap = new Map(
-    suppressions.map((suppression) => [normaliseEmail(suppression.email), suppression])
-  );
-
-  const configOptions = resolveIntelligentConfig(config.configJson);
-  const upcomingShows = await getTenantUpcomingShows(tenantId, configOptions.horizonDays);
-
-  let eligibleCount = 0;
-  let suppressedCount = 0;
-  let capBlockedCount = 0;
-  const sampleRecipients: Array<{ email: string; reasons: string[]; topShows: string[] }> = [];
-  const recipientsToCreate: Array<{
-    tenantId: string;
-    campaignId: string;
-    contactId: string;
-    email: string;
-    status: MarketingRecipientStatus;
-  }> = [];
-  const snapshotsToCreate: Array<{
-    tenantId: string;
-    campaignId: string;
-    templateId: string;
-    recipientEmail: string;
-    renderedHtml: string;
-    renderedText: string | null;
-    mergeContext: Prisma.InputJsonValue;
-  }> = [];
-
-  const runAt = new Date();
-  const runDateLabel = runAt.toISOString().slice(0, 10);
-  const campaignName = `IC: ${kind} ${runDateLabel}`;
-  let campaignId: string | null = null;
-
-  if (!dryRun) {
-    const existingAllContacts = await prisma.marketingSegment.findFirst({
-      where: {
-        tenantId,
-        name: { equals: 'All contacts', mode: 'insensitive' },
-      },
-    });
-    let segment = existingAllContacts;
-    if (!segment) {
-      segment = await prisma.marketingSegment.findFirst({
-        where: { tenantId, name: 'System: Intelligent Campaigns' },
-      });
-    }
-    if (!segment) {
-      segment = await prisma.marketingSegment.create({
-        data: {
-          tenantId,
-          name: 'System: Intelligent Campaigns',
-          description: 'System segment for intelligent campaign runs.',
-          rules: { rules: [] },
-        },
-      });
-    }
-
-    const created = await prisma.marketingCampaign.create({
-      data: {
-        tenantId,
-        name: campaignName,
-        templateId: config.templateId,
-        segmentId: segment.id,
-        type: MarketingCampaignType.ONE_OFF,
-        status: MarketingCampaignStatus.SCHEDULED,
-        scheduledFor: runAt,
-        scheduledByUserId: req.user?.id || null,
-        createdByUserId: req.user?.id || tenantId,
-      },
-    });
-    campaignId = created.id;
-  }
-
-  for (const contact of contacts) {
-    const email = normaliseEmail(contact.email || '');
-    if (!email) continue;
-
-    const reasons = new Set<string>();
-    const suppression = suppressionMap.get(email) || null;
-    const consentStatus = (contact.consents[0]?.status as MarketingConsentStatus) || MarketingConsentStatus.TRANSACTIONAL_ONLY;
-    const suppressionDecision = shouldSuppressContact(consentStatus, suppression);
-    if (suppressionDecision.suppressed && suppressionDecision.reason) {
-      reasons.add(suppressionDecision.reason);
-    }
-
-    if (suppressionDecision.suppressed) {
-      suppressedCount += 1;
-      if (sampleRecipients.length < 20) {
-        sampleRecipients.push({ email, reasons: Array.from(reasons), topShows: [] });
-      }
-      continue;
-    }
-
-    let recommendedShows = await rankShowsForContact({ tenantId, email }, upcomingShows, { limit: configOptions.limit });
-    if (recommendedShows.length) {
-      const purchaseChecks = await Promise.all(
-        recommendedShows.map(async (show) => ({
-          show,
-          purchased: await hasPurchasedShow(tenantId, email, show.showId),
-        }))
-      );
-      recommendedShows = purchaseChecks.filter((entry) => !entry.purchased).map((entry) => entry.show);
-    }
-
-    if (!recommendedShows.length) {
-      capBlockedCount += 1;
-      reasons.add('no_recommendations');
-      if (sampleRecipients.length < 20) {
-        sampleRecipients.push({ email, reasons: Array.from(reasons), topShows: [] });
-      }
-      continue;
-    }
-
-    const sendCap = await countIntelligentSendsLast30d(tenantId, email);
-    sendCap.reasons.forEach((reason) => reasons.add(reason));
-
-    const topShowId = recommendedShows[0]?.showId;
-    if (topShowId) {
-      const recentEligibility = await hasEmailedShowRecently(tenantId, email, topShowId, configOptions.cooldownDays);
-      recentEligibility.reasons.forEach((reason) => reasons.add(reason));
-    }
-
-    if (!sendCap.eligible || reasons.size > 0) {
-      capBlockedCount += 1;
-      if (sampleRecipients.length < 20) {
-        sampleRecipients.push({
-          email,
-          reasons: Array.from(reasons),
-          topShows: recommendedShows.slice(0, 3).map((show) => show.title || show.showId),
-        });
-      }
-      continue;
-    }
-
-    const token = createUnsubscribeToken({ tenantId, email });
-    const unsubscribeUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(
-      tenant.storefrontSlug || tenant.id
-    )}/${encodeURIComponent(token)}`;
-    const preferencesToken = createPreferencesToken({ tenantId, email });
-    const preferencesUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/preferences/${encodeURIComponent(
-      tenant.storefrontSlug || tenant.id
-    )}/${encodeURIComponent(preferencesToken)}`;
-
-    const recommendedShowsPayload = recommendedShows.map((show) => ({
-      title: show.title,
-      date: show.date,
-      venueName: show.venueName,
-      town: show.town,
-      county: show.county,
-      bookingUrl: show.bookingUrl,
-      imageUrl: show.imageUrl,
-      reason: show.reason,
-      showId: show.showId,
-    }));
-    const showIds = recommendedShows.map((show) => show.showId).filter(Boolean);
-    const recommendedShowsHtml = buildIntelligentShowsHtml(recommendedShowsPayload);
-
-    const mergeContext = {
-      ...buildTemplateMergeContext({
-        contact: {
-          firstName: contact.firstName,
-          lastName: contact.lastName,
-          email,
-          town: contact.town,
-        },
-        links: {
-          managePreferencesLink: preferencesUrl,
-          unsubscribeLink: unsubscribeUrl,
-        },
-      }),
-      recommendedShows: recommendedShowsPayload,
-      recommendedShowsHtml,
-      meta: {
-        kind,
-        reasons: Array.from(reasons),
-        showIds,
-      },
-    };
-
-    let renderedHtml = '';
-    if (config.template.compiledHtml) {
-      renderedHtml = renderCompiledTemplate({
-        compiledHtml: config.template.compiledHtml,
-        mergeContext,
-        unsubscribeUrl,
-        preferencesUrl,
-        recommendedShows: recommendedShowsHtml,
-      });
-      if (config.template.compiledText) {
-        renderMergeTags(config.template.compiledText, mergeContext);
-      }
-    } else {
-      const rendered = renderMarketingTemplate(config.template.mjmlBody, {
-        firstName: contact.firstName || '',
-        lastName: contact.lastName || '',
-        email,
-        tenantName: tenantNameFrom(tenant),
-        unsubscribeUrl,
-        preferencesUrl,
-        recommendedShows: recommendedShowsHtml,
-      });
-      renderedHtml = rendered.html;
-    }
-
-    eligibleCount += 1;
-    if (sampleRecipients.length < 20) {
-      sampleRecipients.push({
-        email,
-        reasons: Array.from(reasons),
-        topShows: recommendedShows.slice(0, 3).map((show) => show.title || show.showId),
-      });
-    }
-
-    if (!dryRun && campaignId) {
-      recipientsToCreate.push({
-        tenantId,
-        campaignId,
-        contactId: contact.id,
-        email,
-        status: MarketingRecipientStatus.PENDING,
-      });
-      snapshotsToCreate.push({
-        tenantId,
-        campaignId,
-        templateId: config.templateId,
-        recipientEmail: email,
-        renderedHtml,
-        renderedText: null,
-        mergeContext: mergeContext as Prisma.InputJsonValue,
-      });
-    }
-  }
-
-  if (!dryRun && campaignId) {
-    if (recipientsToCreate.length) {
-      await prisma.marketingCampaignRecipient.createMany({
-        data: recipientsToCreate,
-        skipDuplicates: true,
-      });
-    }
-    if (snapshotsToCreate.length) {
-      await prisma.marketingSendSnapshot.createMany({
-        data: snapshotsToCreate,
-      });
-    }
-    await prisma.marketingCampaign.update({
-      where: { id: campaignId },
-      data: { recipientsPreparedAt: runAt },
-    });
+  if (!runResult.ok) {
+    return res.status(runResult.status).json({ ok: false, message: runResult.message });
   }
 
   const response = {
     ok: true,
-    campaignId,
-    eligibleCount,
-    suppressedCount,
-    capBlockedCount,
-    sampleRecipients,
+    runId: runResult.runId,
+    campaignId: runResult.campaignId,
+    eligibleCount: runResult.eligibleCount,
+    suppressedCount: runResult.suppressedCount,
+    capBlockedCount: runResult.capBlockedCount,
+    sampleRecipients: runResult.sampleRecipients,
+    skippedReason: runResult.skippedReason,
   };
   logMarketingApi(req, response);
   res.json(response);
