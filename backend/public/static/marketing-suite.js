@@ -1126,13 +1126,17 @@ window.updateActiveBlockBg = function(color) {
         const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
         if (block && block.content) {
             block.content.bgColor = color;
-            if (block.type === 'strip') {
+            if (block.type === 'strip' || block.type === 'boxedtext') {
                 block.content.gradient = null;
             }
             block.content.isTransparent = false;
             const transparentToggle = document.getElementById('input-strip-transparent');
             if (transparentToggle && transparentToggle.checked) {
                 transparentToggle.checked = false;
+            }
+            const boxedTransparentToggle = document.getElementById('input-boxedtext-transparent');
+            if (boxedTransparentToggle && boxedTransparentToggle.checked) {
+                boxedTransparentToggle.checked = false;
             }
             recordEditorHistory({ immediate: false });
             renderBuilderCanvas(); // Re-render to show change
@@ -1144,6 +1148,13 @@ function getActiveStripBlock() {
     if (!window.activeBlockId) return null;
     const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
     if (!block || block.type !== 'strip') return null;
+    return block;
+}
+
+function getActiveBoxedTextBlock() {
+    if (!window.activeBlockId) return null;
+    const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+    if (!block || block.type !== 'boxedtext') return null;
     return block;
 }
 
@@ -1199,6 +1210,61 @@ window.updateStripGradientEnd = function(color) {
         start: window.currentStripGradientStart || '#111827',
         end: window.currentStripGradientEnd,
         direction: window.currentStripGradientDirection || 'to bottom',
+    });
+};
+
+window.updateBoxedTextTransparency = function(isTransparent) {
+    const block = getActiveBoxedTextBlock();
+    if (!block || !block.content) return;
+    block.content.isTransparent = isTransparent;
+    if (isTransparent) {
+        block.content.gradient = null;
+    }
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
+};
+
+window.updateActiveBoxedTextGradient = function(gradient, payload = {}) {
+    const block = getActiveBoxedTextBlock();
+    if (!block || !block.content) return;
+    block.content.gradient = {
+        css: gradient,
+        ...payload,
+    };
+    block.content.isTransparent = false;
+    const transparentToggle = document.getElementById('input-boxedtext-transparent');
+    if (transparentToggle && transparentToggle.checked) {
+        transparentToggle.checked = false;
+    }
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
+};
+
+window.updateBoxedTextGradientStart = function(color) {
+    window.currentBoxedTextGradientStart = color;
+    const gradient = getGradientCss(
+        window.currentBoxedTextGradientDirection || 'to bottom',
+        window.currentBoxedTextGradientStart || '#111827',
+        window.currentBoxedTextGradientEnd || '#f9fafb'
+    );
+    window.updateActiveBoxedTextGradient(gradient, {
+        start: window.currentBoxedTextGradientStart,
+        end: window.currentBoxedTextGradientEnd || '#f9fafb',
+        direction: window.currentBoxedTextGradientDirection || 'to bottom',
+    });
+};
+
+window.updateBoxedTextGradientEnd = function(color) {
+    window.currentBoxedTextGradientEnd = color;
+    const gradient = getGradientCss(
+        window.currentBoxedTextGradientDirection || 'to bottom',
+        window.currentBoxedTextGradientStart || '#111827',
+        window.currentBoxedTextGradientEnd || '#f9fafb'
+    );
+    window.updateActiveBoxedTextGradient(gradient, {
+        start: window.currentBoxedTextGradientStart || '#111827',
+        end: window.currentBoxedTextGradientEnd,
+        direction: window.currentBoxedTextGradientDirection || 'to bottom',
     });
 };
 
@@ -2705,7 +2771,16 @@ case 'strip': return {
     margin: '0'         // Added margin control
 };
       case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
-        case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
+        case 'boxedtext': return {
+            text: '<p>This is text inside a colored box.</p>',
+            bgColor: '#f1f5f9',
+            gradient: null,
+            isTransparent: false,
+            fullWidth: false,
+            padding: '20px',
+            borderRadius: '6',
+            margin: '0',
+        };
         case 'image':
             return {
                 src: placeholderLarge,
@@ -2975,6 +3050,13 @@ function createBlockElement(block, index, parentArray) {
     el.className = 'ms-builder-block';
     el.setAttribute('draggable', 'true');
     el.dataset.id = block.id;
+
+    if (block.type === 'boxedtext') {
+        el.classList.add('is-boxedtext');
+        if (block.content.fullWidth) {
+            el.classList.add('is-fullwidth');
+        }
+    }
     
     // --- STRIP SPECIAL HANDLING ---
     if (block.type === 'strip') {
@@ -3082,7 +3164,25 @@ function getPreviewHtml(block) {
     const c = block.content;
     switch(block.type) {
         case 'text': return `<div>${c.text}</div>`;
-        case 'boxedtext': return `<div style="background:${c.bgColor}; padding:20px; border-radius:4px;">${c.text}</div>`;
+        case 'boxedtext': {
+            const isTransparent = Boolean(c.isTransparent);
+            const gradientData = c.gradient || null;
+            const padValue = Number.parseInt(c.padding, 10);
+            const radiusValue = Number.parseInt(c.borderRadius, 10);
+            const marginValue = Number.parseInt(c.margin, 10);
+            const pad = Number.isFinite(padValue) ? padValue : 20;
+            const radius = Number.isFinite(radiusValue) ? radiusValue : 6;
+            const margin = Number.isFinite(marginValue) ? Math.max(marginValue, 0) : 0;
+            const backgroundColor = isTransparent
+                ? 'transparent'
+                : (gradientData?.start || c.bgColor || '#f1f5f9');
+            const backgroundImage = !isTransparent && gradientData?.css ? gradientData.css : 'none';
+            return `
+                <div class="ms-boxed-text${isTransparent ? ' is-transparent' : ''}" style="margin: 0 ${margin}px; padding:${pad}px; border-radius:${radius}px; background-color:${backgroundColor}; background-image:${backgroundImage};">
+                    ${c.text}
+                </div>
+            `;
+        }
         case 'image': {
             const imageHtml = `<img src="${escapeHtml(c.src)}" alt="${escapeHtml(c.alt || '')}" style="width:100%; display:block;">`;
             if (c.link) {
@@ -3173,6 +3273,287 @@ function getBlockTypeLabel(type) {
 function updateBlockEditorTitle(title) {
     const titleEl = document.getElementById('ms-block-editor-title');
     if (titleEl) titleEl.textContent = title;
+}
+
+function getRichTextEditorMarkup(block) {
+    const textColor = block.content.color || '#0f172a';
+    const highlightColor = block.content.highlightColor || '#ffffff';
+    return `
+        <div class="ms-field">
+            <label>Content</label>
+            <div class="ms-rte-toolbar">
+                <button class="ms-rte-btn" type="button" data-rte-command="bold" title="Bold"><strong>B</strong></button>
+                <button class="ms-rte-btn" type="button" data-rte-command="italic" title="Italic"><em>I</em></button>
+                <button class="ms-rte-btn" type="button" data-rte-command="underline" title="Underline"><span style="text-decoration:underline;">U</span></button>
+                <button class="ms-rte-btn" type="button" data-rte-command="strikeThrough" title="Strikethrough"><span style="text-decoration:line-through;">S</span></button>
+                <span class="ms-rte-divider"></span>
+                <button class="ms-rte-btn" type="button" data-rte-command="insertUnorderedList" title="Bulleted list">• List</button>
+                <button class="ms-rte-btn" type="button" data-rte-command="insertOrderedList" title="Numbered list">1. List</button>
+                <span class="ms-rte-divider"></span>
+                <button class="ms-rte-btn" type="button" data-rte-command="justifyLeft" title="Align left">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <button class="ms-rte-btn" type="button" data-rte-command="justifyCenter" title="Align center">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12M4 12h16M6 18h12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <button class="ms-rte-btn" type="button" data-rte-command="justifyRight" title="Align right">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M4 12h16M10 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <span class="ms-rte-divider"></span>
+                <button class="ms-rte-btn" type="button" data-rte-command="createLink" title="Insert link">🔗</button>
+                <button class="ms-rte-btn" type="button" data-rte-command="removeFormat" title="Clear formatting">✕</button>
+                <select class="ms-rte-select" data-rte-command="textStyle" aria-label="Text style">
+                    ${TEXT_STYLE_PRESETS.map((preset) => `<option value="${preset.value}">${preset.label}</option>`).join('')}
+                </select>
+                <select class="ms-rte-select" data-rte-command="fontName" aria-label="Font family">
+                    <option value="Arial">Arial</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Inter">Inter</option>
+                    <option value="DM Sans">DM Sans</option>
+                    <option value="Manrope">Manrope</option>
+                    <option value="Rubik">Rubik</option>
+                    <option value="Quicksand">Quicksand</option>
+                    <option value="Karla">Karla</option>
+                    <option value="Libre Franklin">Libre Franklin</option>
+                    <option value="Libre Baskerville">Libre Baskerville</option>
+                    <option value="Lora">Lora</option>
+                    <option value="Space Grotesk">Space Grotesk</option>
+                    <option value="Roboto">Roboto</option>
+                    <option value="Open Sans">Open Sans</option>
+                    <option value="Lato">Lato</option>
+                    <option value="Montserrat">Montserrat</option>
+                    <option value="Poppins">Poppins</option>
+                    <option value="Raleway">Raleway</option>
+                    <option value="Playfair Display">Playfair Display</option>
+                    <option value="Merriweather">Merriweather</option>
+                    <option value="Source Sans 3">Source Sans 3</option>
+                    <option value="Nunito">Nunito</option>
+                    <option value="Ubuntu">Ubuntu</option>
+                    <option value="Oswald">Oswald</option>
+                    <option value="PT Sans">PT Sans</option>
+                    <option value="Work Sans">Work Sans</option>
+                    <option value="Fira Sans">Fira Sans</option>
+                </select>
+                <select class="ms-rte-select" data-rte-command="fontSize" aria-label="Font size">
+                    <option value="12">12px</option>
+                    <option value="14">14px</option>
+                    <option value="16" selected>16px</option>
+                    <option value="18">18px</option>
+                    <option value="24">24px</option>
+                    <option value="32">32px</option>
+                </select>
+                <div class="ms-rte-line-spacing" role="group" aria-label="Line spacing">
+                    <button class="ms-rte-btn ms-rte-line-spacing-trigger" type="button" data-rte-command="lineSpacing" aria-expanded="false">
+                        Line spacing
+                    </button>
+                    <div class="ms-rte-line-spacing-popover" data-line-spacing-popover>
+                        <div class="ms-rte-line-spacing-header">
+                            <span>Line spacing</span>
+                            <span class="ms-rte-line-spacing-value" data-line-spacing-value>1.50x</span>
+                        </div>
+                        <input
+                            class="ms-rte-line-spacing-range"
+                            type="range"
+                            min="1"
+                            max="3"
+                            step="0.05"
+                            value="1.5"
+                            data-line-spacing-range
+                        />
+                    </div>
+                </div>
+            </div>
+            <div id="ms-text-editor" class="ms-rte-editor" contenteditable="true">${block.content.text || ''}</div>
+        </div>
+        <div class="ms-rte-color-row">
+            ${renderModernColorPicker('Text Color', 'text-color', textColor, 'updateActiveTextColor')}
+            ${renderModernColorPicker('Highlight Color', 'text-highlight', highlightColor, 'updateActiveTextHighlight')}
+        </div>
+    `;
+}
+
+function setupRichTextEditor(container, block) {
+    const editor = container.querySelector('#ms-text-editor');
+    if (!editor) return;
+    window.activeTextEditor = editor;
+    const colorPickers = Array.from(container.querySelectorAll('.ms-color-picker-wrapper'));
+    const setColorPickerState = (enabled) => {
+        rteSelectionActive = Boolean(enabled);
+        colorPickers.forEach((picker) => {
+            picker.classList.toggle('is-disabled', !enabled);
+            picker.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        });
+    };
+    const updateSelectionState = () => {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+            setColorPickerState(Boolean(savedRteSelection));
+            return;
+        }
+        const range = selection.getRangeAt(0);
+        const isInEditor = editor.contains(range.startContainer) && editor.contains(range.endContainer);
+        const hasSavedSelection =
+            savedRteSelection &&
+            editor.contains(savedRteSelection.startContainer) &&
+            editor.contains(savedRteSelection.endContainer);
+        if (isInEditor && !selection.isCollapsed) {
+            savedRteSelection = range.cloneRange();
+            setColorPickerState(true);
+            return;
+        }
+        if (hasSavedSelection) {
+            setColorPickerState(true);
+            return;
+        }
+        if (!isInEditor) {
+            setColorPickerState(false);
+        }
+    };
+    if (typeof rteCleanupHandler === 'function') {
+        rteCleanupHandler();
+        rteCleanupHandler = null;
+    }
+    const saveSelection = () => {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return;
+        savedRteSelection = range.cloneRange();
+    };
+    const handleSelectionChange = () => {
+        updateSelectionState();
+    };
+    const handleOutsideClick = (event) => {
+        if (!container.contains(event.target)) {
+            savedRteSelection = null;
+            setColorPickerState(false);
+        }
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    document.addEventListener('mousedown', handleOutsideClick);
+    rteCleanupHandler = () => {
+        document.removeEventListener('selectionchange', handleSelectionChange);
+        document.removeEventListener('mousedown', handleOutsideClick);
+        window.activeTextEditor = null;
+    };
+    setColorPickerState(false);
+    editor.addEventListener('keyup', saveSelection);
+    editor.addEventListener('mouseup', saveSelection);
+    editor.addEventListener('focus', saveSelection);
+    editor.addEventListener('focus', updateSelectionState);
+    editor.addEventListener('input', () => {
+        block.content.text = editor.innerHTML;
+        recordEditorHistory({ immediate: false });
+        renderBuilderCanvas();
+    });
+    const lineSpacingWrapper = container.querySelector('.ms-rte-line-spacing');
+    const lineSpacingButton = container.querySelector('[data-rte-command="lineSpacing"]');
+    const lineSpacingPopover = container.querySelector('[data-line-spacing-popover]');
+    const lineSpacingRange = container.querySelector('[data-line-spacing-range]');
+    const lineSpacingValue = container.querySelector('[data-line-spacing-value]');
+    const updateLineSpacingValue = (ratio) => {
+        const safeRatio = Math.min(3, Math.max(1, Number.parseFloat(ratio) || 1.5));
+        if (lineSpacingRange) lineSpacingRange.value = safeRatio;
+        if (lineSpacingValue) lineSpacingValue.textContent = `${safeRatio.toFixed(2)}x`;
+    };
+    const setLineSpacingOpen = (open) => {
+        if (!lineSpacingWrapper || !lineSpacingButton || !lineSpacingPopover) return;
+        lineSpacingWrapper.classList.toggle('is-open', open);
+        lineSpacingButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+            const ratio = getLineHeightRatioFromSelection(editor);
+            updateLineSpacingValue(ratio);
+        }
+    };
+    if (lineSpacingButton) {
+        lineSpacingButton.addEventListener('click', () => {
+            saveSelection();
+            const isOpen = lineSpacingWrapper?.classList.contains('is-open');
+            setLineSpacingOpen(!isOpen);
+        });
+    }
+    if (lineSpacingRange) {
+        lineSpacingRange.addEventListener('input', () => {
+            restoreRteSelection(editor);
+            const ratio = Number.parseFloat(lineSpacingRange.value);
+            applyLineHeightRatio(editor, ratio);
+            updateLineSpacingValue(ratio);
+            block.content.text = editor.innerHTML;
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+            saveSelection();
+        });
+        lineSpacingRange.addEventListener('change', () => {
+            recordEditorHistory();
+        });
+    }
+    const handleLineSpacingOutsideClick = (event) => {
+        if (!lineSpacingWrapper) return;
+        if (!lineSpacingWrapper.contains(event.target)) {
+            setLineSpacingOpen(false);
+        }
+    };
+    document.addEventListener('mousedown', handleLineSpacingOutsideClick);
+    const previousCleanup = rteCleanupHandler;
+    rteCleanupHandler = () => {
+        if (typeof previousCleanup === 'function') previousCleanup();
+        document.removeEventListener('mousedown', handleLineSpacingOutsideClick);
+        window.activeTextEditor = null;
+    };
+    container.querySelectorAll('button[data-rte-command]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const command = button.getAttribute('data-rte-command');
+            if (command === 'lineSpacing') return;
+            restoreRteSelection(editor);
+            if (command === 'createLink') {
+                const url = prompt('Enter a URL');
+                if (url) document.execCommand('createLink', false, url);
+            } else if (command === 'justifyLeft' || command === 'justifyCenter' || command === 'justifyRight') {
+                const alignmentMap = {
+                    justifyLeft: 'left',
+                    justifyCenter: 'center',
+                    justifyRight: 'right',
+                };
+                applyAlignment(editor, alignmentMap[command]);
+            } else if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
+                const currentAlignment = getAlignmentFromSelection(editor);
+                document.execCommand(command, false, null);
+                applyAlignment(editor, currentAlignment, { applyToAllOnCollapse: false });
+            } else {
+                document.execCommand('styleWithCSS', false, true);
+                document.execCommand(command, false, null);
+            }
+            block.content.text = editor.innerHTML;
+            recordEditorHistory();
+            renderBuilderCanvas();
+            saveSelection();
+        });
+    });
+    container.querySelectorAll('select[data-rte-command]').forEach((select) => {
+        select.addEventListener('change', (event) => {
+            const command = select.getAttribute('data-rte-command');
+            restoreRteSelection(editor);
+            if (command === 'textStyle') {
+                applyTextStyle(editor, event.target.value);
+            } else if (command === 'fontSize') {
+                const value = Number.parseInt(event.target.value, 10);
+                const sizeMap = { 12: 2, 14: 3, 16: 3, 18: 4, 24: 5, 32: 6 };
+                document.execCommand('fontSize', false, sizeMap[value] || 3);
+            } else {
+                const fontKey = event.target.value;
+                const fontFamily = FONT_FAMILY_MAP[fontKey] || fontKey;
+                applyFontFamily(editor, fontFamily);
+            }
+            block.content.text = editor.innerHTML;
+            recordEditorHistory();
+            renderBuilderCanvas();
+            saveSelection();
+            updateSelectionState();
+        });
+    });
 }
 
 function openBlockEditor(block) {
@@ -3322,280 +3703,72 @@ function openBlockEditor(block) {
     }
     // --- TEXT EDITOR ---
     else if (block.type === 'text') {
-        const textColor = block.content.color || '#0f172a';
-        const highlightColor = block.content.highlightColor || '#ffffff';
+        container.innerHTML = getRichTextEditorMarkup(block);
+        setupRichTextEditor(container, block);
+    }
+    // --- BOXED TEXT EDITOR ---
+    else if (block.type === 'boxedtext') {
+        const boxedGradient = block.content.gradient || {};
+        const boxedGradientStart = boxedGradient.start || '#111827';
+        const boxedGradientEnd = boxedGradient.end || '#f9fafb';
         container.innerHTML = `
-            <div class="ms-field">
-                <label>Content</label>
-                <div class="ms-rte-toolbar">
-                    <button class="ms-rte-btn" type="button" data-rte-command="bold" title="Bold"><strong>B</strong></button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="italic" title="Italic"><em>I</em></button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="underline" title="Underline"><span style="text-decoration:underline;">U</span></button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="strikeThrough" title="Strikethrough"><span style="text-decoration:line-through;">S</span></button>
-                    <span class="ms-rte-divider"></span>
-                    <button class="ms-rte-btn" type="button" data-rte-command="insertUnorderedList" title="Bulleted list">• List</button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="insertOrderedList" title="Numbered list">1. List</button>
-                    <span class="ms-rte-divider"></span>
-                    <button class="ms-rte-btn" type="button" data-rte-command="justifyLeft" title="Align left">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-                    </button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="justifyCenter" title="Align center">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12M4 12h16M6 18h12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-                    </button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="justifyRight" title="Align right">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M4 12h16M10 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-                    </button>
-                    <span class="ms-rte-divider"></span>
-                    <button class="ms-rte-btn" type="button" data-rte-command="createLink" title="Insert link">🔗</button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="removeFormat" title="Clear formatting">✕</button>
-                    <select class="ms-rte-select" data-rte-command="textStyle" aria-label="Text style">
-                        ${TEXT_STYLE_PRESETS.map((preset) => `<option value="${preset.value}">${preset.label}</option>`).join('')}
-                    </select>
-                    <select class="ms-rte-select" data-rte-command="fontName" aria-label="Font family">
-                        <option value="Arial">Arial</option>
-                        <option value="Helvetica">Helvetica</option>
-                        <option value="Georgia">Georgia</option>
-                        <option value="Times New Roman">Times New Roman</option>
-                        <option value="Courier New">Courier New</option>
-                        <option value="Inter">Inter</option>
-                        <option value="DM Sans">DM Sans</option>
-                        <option value="Manrope">Manrope</option>
-                        <option value="Rubik">Rubik</option>
-                        <option value="Quicksand">Quicksand</option>
-                        <option value="Karla">Karla</option>
-                        <option value="Libre Franklin">Libre Franklin</option>
-                        <option value="Libre Baskerville">Libre Baskerville</option>
-                        <option value="Lora">Lora</option>
-                        <option value="Space Grotesk">Space Grotesk</option>
-                        <option value="Roboto">Roboto</option>
-                        <option value="Open Sans">Open Sans</option>
-                        <option value="Lato">Lato</option>
-                        <option value="Montserrat">Montserrat</option>
-                        <option value="Poppins">Poppins</option>
-                        <option value="Raleway">Raleway</option>
-                        <option value="Playfair Display">Playfair Display</option>
-                        <option value="Merriweather">Merriweather</option>
-                        <option value="Source Sans 3">Source Sans 3</option>
-                        <option value="Nunito">Nunito</option>
-                        <option value="Ubuntu">Ubuntu</option>
-                        <option value="Oswald">Oswald</option>
-                        <option value="PT Sans">PT Sans</option>
-                        <option value="Work Sans">Work Sans</option>
-                        <option value="Fira Sans">Fira Sans</option>
-                    </select>
-                    <select class="ms-rte-select" data-rte-command="fontSize" aria-label="Font size">
-                        <option value="12">12px</option>
-                        <option value="14">14px</option>
-                        <option value="16" selected>16px</option>
-                        <option value="18">18px</option>
-                        <option value="24">24px</option>
-                        <option value="32">32px</option>
-                    </select>
-                    <div class="ms-rte-line-spacing" role="group" aria-label="Line spacing">
-                        <button class="ms-rte-btn ms-rte-line-spacing-trigger" type="button" data-rte-command="lineSpacing" aria-expanded="false">
-                            Line spacing
-                        </button>
-                        <div class="ms-rte-line-spacing-popover" data-line-spacing-popover>
-                            <div class="ms-rte-line-spacing-header">
-                                <span>Line spacing</span>
-                                <span class="ms-rte-line-spacing-value" data-line-spacing-value>1.50x</span>
-                            </div>
-                            <input
-                                class="ms-rte-line-spacing-range"
-                                type="range"
-                                min="1"
-                                max="3"
-                                step="0.05"
-                                value="1.5"
-                                data-line-spacing-range
-                            />
-                        </div>
+            <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
+                <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Boxed Text Settings</div>
+
+                ${renderModernColorPicker('Background Color', 'boxedtext-bg', block.content.bgColor || '#f1f5f9', 'updateActiveBlockBg')}
+
+                <div class="ms-field" style="margin-top:12px;">
+                    <label>Gradient presets</label>
+                    <div class="ms-gradient-grid" id="ms-boxedtext-gradient-presets"></div>
+                </div>
+                <div class="ms-gradient-custom">
+                    <div class="ms-sidebar-section-title">Custom gradient</div>
+                    <div class="ms-gradient-picker">
+                        ${renderModernColorPicker('Start color', 'boxedtext-gradient-start', boxedGradientStart, 'updateBoxedTextGradientStart')}
+                        ${renderModernColorPicker('End color', 'boxedtext-gradient-end', boxedGradientEnd, 'updateBoxedTextGradientEnd')}
+                    </div>
+                    <div class="ms-field" style="margin-top:12px;">
+                        <label>Gradient direction</label>
+                        <select id="ms-boxedtext-gradient-direction">
+                            <option value="to bottom">Vertical</option>
+                            <option value="to right">Horizontal</option>
+                            <option value="135deg">Diagonal</option>
+                        </select>
                     </div>
                 </div>
-                <div id="ms-text-editor" class="ms-rte-editor" contenteditable="true">${block.content.text || ''}</div>
+
+                <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:12px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <input type="checkbox" id="input-fullWidth" ${block.content.fullWidth ? 'checked' : ''} onchange="window.updateBlockProp('fullWidth', this.checked)" style="width:auto; margin:0;">
+                    <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full Width Background</label>
+                </div>
+                <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:10px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <input type="checkbox" id="input-boxedtext-transparent" ${block.content.isTransparent ? 'checked' : ''} onchange="window.updateBoxedTextTransparency(this.checked)" style="width:auto; margin:0;">
+                    <label style="margin:0; font-size:13px; cursor:pointer;" for="input-boxedtext-transparent">Transparent background</label>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
+                    <div class="ms-field">
+                        <label>Padding (px)</label>
+                        <input type="number" id="input-padding" value="${parseInt(block.content.padding) || 20}" oninput="window.updateBlockProp('padding', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Side gap (px)</label>
+                        <input type="number" id="input-margin" value="${parseInt(block.content.margin) || 0}" oninput="window.updateBlockProp('margin', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Corner Radius</label>
+                        <input type="number" id="input-borderRadius" value="${parseInt(block.content.borderRadius) || 6}" oninput="window.updateBlockProp('borderRadius', this.value)">
+                    </div>
+                </div>
+
+                <div class="ms-muted" style="margin-top:12px; font-size:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
+                    Combine background styling with rich text for card-like callouts.
+                </div>
             </div>
-            <div class="ms-rte-color-row">
-                ${renderModernColorPicker('Text Color', 'text-color', textColor, 'updateActiveTextColor')}
-                ${renderModernColorPicker('Highlight Color', 'text-highlight', highlightColor, 'updateActiveTextHighlight')}
-            </div>
+            ${getRichTextEditorMarkup(block)}
         `;
-        const editor = container.querySelector('#ms-text-editor');
-        window.activeTextEditor = editor;
-        const colorPickers = Array.from(container.querySelectorAll('.ms-color-picker-wrapper'));
-        const setColorPickerState = (enabled) => {
-            rteSelectionActive = Boolean(enabled);
-            colorPickers.forEach((picker) => {
-                picker.classList.toggle('is-disabled', !enabled);
-                picker.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-            });
-        };
-        const updateSelectionState = () => {
-            const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) {
-                setColorPickerState(Boolean(savedRteSelection));
-                return;
-            }
-            const range = selection.getRangeAt(0);
-            const isInEditor = editor.contains(range.startContainer) && editor.contains(range.endContainer);
-            const hasSavedSelection =
-                savedRteSelection &&
-                editor.contains(savedRteSelection.startContainer) &&
-                editor.contains(savedRteSelection.endContainer);
-            if (isInEditor && !selection.isCollapsed) {
-                savedRteSelection = range.cloneRange();
-                setColorPickerState(true);
-                return;
-            }
-            if (hasSavedSelection) {
-                setColorPickerState(true);
-                return;
-            }
-            if (!isInEditor) {
-                setColorPickerState(false);
-            }
-        };
-        if (typeof rteCleanupHandler === 'function') {
-            rteCleanupHandler();
-            rteCleanupHandler = null;
-        }
-        const saveSelection = () => {
-            const selection = window.getSelection();
-            if (!selection || selection.rangeCount === 0) return;
-            const range = selection.getRangeAt(0);
-            if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return;
-            savedRteSelection = range.cloneRange();
-        };
-        const handleSelectionChange = () => {
-            updateSelectionState();
-        };
-        const handleOutsideClick = (event) => {
-            if (!container.contains(event.target)) {
-                savedRteSelection = null;
-                setColorPickerState(false);
-            }
-        };
-        document.addEventListener('selectionchange', handleSelectionChange);
-        document.addEventListener('mousedown', handleOutsideClick);
-        rteCleanupHandler = () => {
-            document.removeEventListener('selectionchange', handleSelectionChange);
-            document.removeEventListener('mousedown', handleOutsideClick);
-            window.activeTextEditor = null;
-        };
-        setColorPickerState(false);
-        editor.addEventListener('keyup', saveSelection);
-        editor.addEventListener('mouseup', saveSelection);
-        editor.addEventListener('focus', saveSelection);
-        editor.addEventListener('focus', updateSelectionState);
-        editor.addEventListener('input', () => {
-            block.content.text = editor.innerHTML;
-            recordEditorHistory({ immediate: false });
-            renderBuilderCanvas();
-        });
-        const lineSpacingWrapper = container.querySelector('.ms-rte-line-spacing');
-        const lineSpacingButton = container.querySelector('[data-rte-command="lineSpacing"]');
-        const lineSpacingPopover = container.querySelector('[data-line-spacing-popover]');
-        const lineSpacingRange = container.querySelector('[data-line-spacing-range]');
-        const lineSpacingValue = container.querySelector('[data-line-spacing-value]');
-        const updateLineSpacingValue = (ratio) => {
-            const safeRatio = Math.min(3, Math.max(1, Number.parseFloat(ratio) || 1.5));
-            if (lineSpacingRange) lineSpacingRange.value = safeRatio;
-            if (lineSpacingValue) lineSpacingValue.textContent = `${safeRatio.toFixed(2)}x`;
-        };
-        const setLineSpacingOpen = (open) => {
-            if (!lineSpacingWrapper || !lineSpacingButton || !lineSpacingPopover) return;
-            lineSpacingWrapper.classList.toggle('is-open', open);
-            lineSpacingButton.setAttribute('aria-expanded', open ? 'true' : 'false');
-            if (open) {
-                const ratio = getLineHeightRatioFromSelection(editor);
-                updateLineSpacingValue(ratio);
-            }
-        };
-        if (lineSpacingButton) {
-            lineSpacingButton.addEventListener('click', () => {
-                saveSelection();
-                const isOpen = lineSpacingWrapper?.classList.contains('is-open');
-                setLineSpacingOpen(!isOpen);
-            });
-        }
-        if (lineSpacingRange) {
-            lineSpacingRange.addEventListener('input', () => {
-                restoreRteSelection(editor);
-                const ratio = Number.parseFloat(lineSpacingRange.value);
-                applyLineHeightRatio(editor, ratio);
-                updateLineSpacingValue(ratio);
-                block.content.text = editor.innerHTML;
-                recordEditorHistory({ immediate: false });
-                renderBuilderCanvas();
-                saveSelection();
-            });
-            lineSpacingRange.addEventListener('change', () => {
-                recordEditorHistory();
-            });
-        }
-        const handleLineSpacingOutsideClick = (event) => {
-            if (!lineSpacingWrapper) return;
-            if (!lineSpacingWrapper.contains(event.target)) {
-                setLineSpacingOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleLineSpacingOutsideClick);
-        const previousCleanup = rteCleanupHandler;
-        rteCleanupHandler = () => {
-            if (typeof previousCleanup === 'function') previousCleanup();
-            document.removeEventListener('mousedown', handleLineSpacingOutsideClick);
-            window.activeTextEditor = null;
-        };
-        container.querySelectorAll('button[data-rte-command]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const command = button.getAttribute('data-rte-command');
-                if (command === 'lineSpacing') return;
-                restoreRteSelection(editor);
-                if (command === 'createLink') {
-                    const url = prompt('Enter a URL');
-                    if (url) document.execCommand('createLink', false, url);
-                } else if (command === 'justifyLeft' || command === 'justifyCenter' || command === 'justifyRight') {
-                    const alignmentMap = {
-                        justifyLeft: 'left',
-                        justifyCenter: 'center',
-                        justifyRight: 'right',
-                    };
-                    applyAlignment(editor, alignmentMap[command]);
-                } else if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
-                    const currentAlignment = getAlignmentFromSelection(editor);
-                    document.execCommand(command, false, null);
-                    applyAlignment(editor, currentAlignment, { applyToAllOnCollapse: false });
-                } else {
-                    document.execCommand('styleWithCSS', false, true);
-                    document.execCommand(command, false, null);
-                }
-                block.content.text = editor.innerHTML;
-                recordEditorHistory();
-                renderBuilderCanvas();
-                saveSelection();
-            });
-        });
-        container.querySelectorAll('select[data-rte-command]').forEach((select) => {
-            select.addEventListener('change', (event) => {
-                const command = select.getAttribute('data-rte-command');
-                restoreRteSelection(editor);
-                if (command === 'textStyle') {
-                    applyTextStyle(editor, event.target.value);
-                } else if (command === 'fontSize') {
-                    const value = Number.parseInt(event.target.value, 10);
-                    const sizeMap = { 12: 2, 14: 3, 16: 3, 18: 4, 24: 5, 32: 6 };
-                    document.execCommand('fontSize', false, sizeMap[value] || 3);
-                } else {
-                    const fontKey = event.target.value;
-                    const fontFamily = FONT_FAMILY_MAP[fontKey] || fontKey;
-                    applyFontFamily(editor, fontFamily);
-                }
-                block.content.text = editor.innerHTML;
-                recordEditorHistory();
-                renderBuilderCanvas();
-                saveSelection();
-                updateSelectionState();
-            });
-        });
+        setupRichTextEditor(container, block);
+        setupBoxedTextGradientControls(block);
     }
     // --- BUTTON EDITOR ---
     else if (block.type === 'button') {
@@ -3933,6 +4106,69 @@ function setupStripGradientControls(block) {
                 const endInput = document.getElementById('input-strip-gradient-end');
                 const startPreview = document.getElementById('preview-strip-gradient-start');
                 const endPreview = document.getElementById('preview-strip-gradient-end');
+                if (startInput) startInput.value = preset.start;
+                if (endInput) endInput.value = preset.end;
+                if (startPreview) startPreview.style.backgroundColor = preset.start;
+                if (endPreview) endPreview.style.backgroundColor = preset.end;
+                if (directionSelect) directionSelect.value = preset.direction;
+            });
+        });
+    }
+}
+
+function setupBoxedTextGradientControls(block) {
+    const directionSelect = document.getElementById('ms-boxedtext-gradient-direction');
+    const gradientPresets = document.getElementById('ms-boxedtext-gradient-presets');
+    const gradientData = block.content.gradient || {};
+    window.currentBoxedTextGradientStart = gradientData.start || '#111827';
+    window.currentBoxedTextGradientEnd = gradientData.end || '#f9fafb';
+    window.currentBoxedTextGradientDirection = gradientData.direction || 'to bottom';
+
+    if (directionSelect) {
+        directionSelect.value = window.currentBoxedTextGradientDirection;
+        directionSelect.addEventListener('change', (event) => {
+            window.currentBoxedTextGradientDirection = event.target.value;
+            const gradient = getGradientCss(
+                window.currentBoxedTextGradientDirection,
+                window.currentBoxedTextGradientStart || '#111827',
+                window.currentBoxedTextGradientEnd || '#f9fafb'
+            );
+            window.updateActiveBoxedTextGradient(gradient, {
+                start: window.currentBoxedTextGradientStart || '#111827',
+                end: window.currentBoxedTextGradientEnd || '#f9fafb',
+                direction: window.currentBoxedTextGradientDirection,
+            });
+        });
+    }
+
+    if (gradientPresets) {
+        gradientPresets.innerHTML = GRADIENT_PRESETS.map((preset, index) => {
+            const gradient = getGradientCss(preset.direction, preset.start, preset.end);
+            return `
+                <button class="ms-gradient-swatch" type="button" data-boxedtext-gradient-index="${index}" style="background:${gradient}">
+                    <span>${preset.name}</span>
+                </button>
+            `;
+        }).join('');
+
+        gradientPresets.querySelectorAll('[data-boxedtext-gradient-index]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const index = Number.parseInt(button.dataset.boxedtextGradientIndex, 10);
+                const preset = GRADIENT_PRESETS[index];
+                if (!preset) return;
+                window.currentBoxedTextGradientStart = preset.start;
+                window.currentBoxedTextGradientEnd = preset.end;
+                window.currentBoxedTextGradientDirection = preset.direction;
+                const gradient = getGradientCss(preset.direction, preset.start, preset.end);
+                window.updateActiveBoxedTextGradient(gradient, {
+                    start: preset.start,
+                    end: preset.end,
+                    direction: preset.direction,
+                });
+                const startInput = document.getElementById('input-boxedtext-gradient-start');
+                const endInput = document.getElementById('input-boxedtext-gradient-end');
+                const startPreview = document.getElementById('preview-boxedtext-gradient-start');
+                const endPreview = document.getElementById('preview-boxedtext-gradient-end');
                 if (startInput) startInput.value = preset.start;
                 if (endInput) endInput.value = preset.end;
                 if (startPreview) startPreview.style.backgroundColor = preset.start;

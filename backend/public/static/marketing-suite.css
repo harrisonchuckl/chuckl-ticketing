@@ -289,6 +289,11 @@ body {
   padding-right: 0;
 }
 
+.ms-builder-block.is-boxedtext.is-fullwidth {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .ms-builder-block.is-strip > .block-actions {
   pointer-events: none;
   z-index: 2;
@@ -368,6 +373,11 @@ body {
   flex-direction: column;
   gap: 8px;
   min-height: 60px;
+}
+
+.ms-boxed-text {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ms-space-block {
