@@ -501,7 +501,7 @@ async function processAddonUpsellIntelligentCampaigns() {
         const imageUrl = product.images.slice().sort((a, b) => a.sortOrder - b.sortOrder)[0]?.url || null;
         const storefrontSlug = storefrontMap.get(product.storefrontId) || tenant.storefrontSlug || tenant.id;
         const productUrl = product.slug
-          ? `${PUBLIC_BASE_URL.replace(/\\/+$/, '')}/store/${encodeURIComponent(storefrontSlug)}/products/${encodeURIComponent(
+          ? `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/store/${encodeURIComponent(storefrontSlug)}/products/${encodeURIComponent(
               product.slug
             )}`
           : null;
@@ -896,7 +896,7 @@ function resolveShowUrl(
   const slug = show.slug && show.organiser
     ? `/public/${encodeURIComponent(show.organiser.storefrontSlug || show.organiser.id)}/${encodeURIComponent(show.slug)}`
     : null;
-  return `${PUBLIC_BASE_URL.replace(/\\/+$/, '')}${slug || `/public/event/${encodeURIComponent(show.id)}`}`;
+  return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}${slug || `/public/event/${encodeURIComponent(show.id)}`}`;
 }
 
 function formatShowDate(date?: Date | string | null) {
@@ -912,14 +912,14 @@ function tenantNameFrom(user: { tradingName?: string | null; companyName?: strin
 
 function buildUnsubscribeUrl(tenant: { storefrontSlug?: string | null; id: string }, email: string) {
   const token = createUnsubscribeToken({ tenantId: tenant.id, email });
-  return `${PUBLIC_BASE_URL.replace(/\\/+$/, '')}/u/${encodeURIComponent(tenant.storefrontSlug || tenant.id)}/${encodeURIComponent(
+  return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(tenant.storefrontSlug || tenant.id)}/${encodeURIComponent(
     token
   )}`;
 }
 
 function buildPreferencesUrl(tenant: { storefrontSlug?: string | null; id: string }, email: string) {
   const token = createPreferencesToken({ tenantId: tenant.id, email });
-  return `${PUBLIC_BASE_URL.replace(/\\/+$/, '')}/preferences/${encodeURIComponent(tenant.storefrontSlug || tenant.id)}/${encodeURIComponent(
+  return `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/preferences/${encodeURIComponent(tenant.storefrontSlug || tenant.id)}/${encodeURIComponent(
     token
   )}`;
 }
