@@ -1147,9 +1147,11 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
   if (!kind) {
     return res.status(400).json({ ok: false, message: 'Invalid intelligent campaign kind.' });
   }
-  if (req.body?.dryRun !== true) {
-    return res.status(400).json({ ok: false, message: 'dryRun must be true.' });
+  const dryRunProvided = typeof req.body?.dryRun !== 'undefined';
+  if (dryRunProvided && typeof req.body?.dryRun !== 'boolean') {
+    return res.status(400).json({ ok: false, message: 'dryRun must be a boolean.' });
   }
+  const dryRun = req.body?.dryRun !== false;
 
   const config = await prisma.marketingIntelligentCampaign.findFirst({
     where: { tenantId, kind },
@@ -1184,6 +1186,67 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
   let suppressedCount = 0;
   let capBlockedCount = 0;
   const sampleRecipients: Array<{ email: string; reasons: string[]; topShows: string[] }> = [];
+  const recipientsToCreate: Array<{
+    tenantId: string;
+    campaignId: string;
+    contactId: string;
+    email: string;
+    status: MarketingRecipientStatus;
+  }> = [];
+  const snapshotsToCreate: Array<{
+    tenantId: string;
+    campaignId: string;
+    templateId: string;
+    recipientEmail: string;
+    renderedHtml: string;
+    renderedText: string | null;
+    mergeContext: Prisma.InputJsonValue;
+  }> = [];
+
+  const runAt = new Date();
+  const runDateLabel = runAt.toISOString().slice(0, 10);
+  const campaignName = `IC: ${kind} ${runDateLabel}`;
+  let campaignId: string | null = null;
+
+  if (!dryRun) {
+    const existingAllContacts = await prisma.marketingSegment.findFirst({
+      where: {
+        tenantId,
+        name: { equals: 'All contacts', mode: 'insensitive' },
+      },
+    });
+    let segment = existingAllContacts;
+    if (!segment) {
+      segment = await prisma.marketingSegment.findFirst({
+        where: { tenantId, name: 'System: Intelligent Campaigns' },
+      });
+    }
+    if (!segment) {
+      segment = await prisma.marketingSegment.create({
+        data: {
+          tenantId,
+          name: 'System: Intelligent Campaigns',
+          description: 'System segment for intelligent campaign runs.',
+          rules: { rules: [] },
+        },
+      });
+    }
+
+    const created = await prisma.marketingCampaign.create({
+      data: {
+        tenantId,
+        name: campaignName,
+        templateId: config.templateId,
+        segmentId: segment.id,
+        type: MarketingCampaignType.ONE_OFF,
+        status: MarketingCampaignStatus.SCHEDULED,
+        scheduledFor: runAt,
+        scheduledByUserId: req.user?.id || null,
+        createdByUserId: req.user?.id || tenantId,
+      },
+    });
+    campaignId = created.id;
+  }
 
   for (const contact of contacts) {
     const email = normaliseEmail(contact.email || '');
@@ -1264,7 +1327,9 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
       bookingUrl: show.bookingUrl,
       imageUrl: show.imageUrl,
       reason: show.reason,
+      showId: show.showId,
     }));
+    const showIds = recommendedShows.map((show) => show.showId).filter(Boolean);
     const recommendedShowsHtml = buildIntelligentShowsHtml(recommendedShowsPayload);
 
     const mergeContext = {
@@ -1285,11 +1350,13 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
       meta: {
         kind,
         reasons: Array.from(reasons),
+        showIds,
       },
     };
 
+    let renderedHtml = '';
     if (config.template.compiledHtml) {
-      renderCompiledTemplate({
+      renderedHtml = renderCompiledTemplate({
         compiledHtml: config.template.compiledHtml,
         mergeContext,
         unsubscribeUrl,
@@ -1300,7 +1367,7 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
         renderMergeTags(config.template.compiledText, mergeContext);
       }
     } else {
-      renderMarketingTemplate(config.template.mjmlBody, {
+      const rendered = renderMarketingTemplate(config.template.mjmlBody, {
         firstName: contact.firstName || '',
         lastName: contact.lastName || '',
         email,
@@ -1309,6 +1376,7 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
         preferencesUrl,
         recommendedShows: recommendedShowsHtml,
       });
+      renderedHtml = rendered.html;
     }
 
     eligibleCount += 1;
@@ -1319,9 +1387,53 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
         topShows: recommendedShows.slice(0, 3).map((show) => show.title || show.showId),
       });
     }
+
+    if (!dryRun && campaignId) {
+      recipientsToCreate.push({
+        tenantId,
+        campaignId,
+        contactId: contact.id,
+        email,
+        status: MarketingRecipientStatus.PENDING,
+      });
+      snapshotsToCreate.push({
+        tenantId,
+        campaignId,
+        templateId: config.templateId,
+        recipientEmail: email,
+        renderedHtml,
+        renderedText: null,
+        mergeContext: mergeContext as Prisma.InputJsonValue,
+      });
+    }
   }
 
-  const response = { ok: true, eligibleCount, suppressedCount, capBlockedCount, sampleRecipients };
+  if (!dryRun && campaignId) {
+    if (recipientsToCreate.length) {
+      await prisma.marketingCampaignRecipient.createMany({
+        data: recipientsToCreate,
+        skipDuplicates: true,
+      });
+    }
+    if (snapshotsToCreate.length) {
+      await prisma.marketingSendSnapshot.createMany({
+        data: snapshotsToCreate,
+      });
+    }
+    await prisma.marketingCampaign.update({
+      where: { id: campaignId },
+      data: { recipientsPreparedAt: runAt },
+    });
+  }
+
+  const response = {
+    ok: true,
+    campaignId,
+    eligibleCount,
+    suppressedCount,
+    capBlockedCount,
+    sampleRecipients,
+  };
   logMarketingApi(req, response);
   res.json(response);
 });
