@@ -912,7 +912,7 @@ async function renderTemplateEditor(templateId) {
     <div class="ms-builder-sidebar">
       <div class="ms-sidebar-tabs">
         <button class="ms-tab-btn active" data-sidebar-tab="blocks">Content</button>
-        <button class="ms-tab-btn" data-sidebar-tab="styles">Styles</button>
+        <button class="ms-tab-btn" data-sidebar-tab="styles">Page styles</button>
       </div>
 
     <div id="ms-sidebar-blocks" class="ms-sidebar-panel active">
@@ -972,18 +972,28 @@ async function renderTemplateEditor(templateId) {
         </div>
       </div>
     <div id="ms-sidebar-styles" class="ms-sidebar-panel">
-    ${renderModernColorPicker('Page Background', 'global-bg', '#ffffff', 'updateCanvasBg')}
-    
-    <div class="ms-field" style="margin-top:12px;">
-        <label>Font Family</label>
-        
-            <select id="ms-style-font">
-                <option value="Arial">Arial</option>
-                <option value="Helvetica">Helvetica</option>
-                <option value="Georgia">Georgia</option>
-            </select>
+      <div class="ms-sidebar-section-title">Page styles</div>
+      ${renderModernColorPicker('Page Background', 'global-bg', '#ffffff', 'updateCanvasBg')}
+      <div class="ms-field" style="margin-top:12px;">
+        <label>Gradient presets</label>
+        <div class="ms-gradient-grid" id="ms-gradient-presets"></div>
+      </div>
+      <div class="ms-gradient-custom">
+        <div class="ms-sidebar-section-title">Custom gradient</div>
+        <div class="ms-gradient-picker">
+          ${renderModernColorPicker('Start color', 'gradient-start', '#111827', 'updateGradientStart')}
+          ${renderModernColorPicker('End color', 'gradient-end', '#f9fafb', 'updateGradientEnd')}
+        </div>
+        <div class="ms-field" style="margin-top:12px;">
+          <label>Gradient direction</label>
+          <select id="ms-gradient-direction">
+            <option value="to bottom">Vertical</option>
+            <option value="to right">Horizontal</option>
+            <option value="135deg">Diagonal</option>
+          </select>
         </div>
       </div>
+    </div>
 
       <div id="ms-block-editor" class="ms-sidebar-panel hidden">
         <div class="ms-toolbar ms-block-editor-header" style="margin-bottom:10px;">
@@ -2217,6 +2227,66 @@ function setupVisualBuilder() {
         });
     });
 
+    const directionSelect = document.getElementById('ms-gradient-direction');
+    const gradientPresets = document.getElementById('ms-gradient-presets');
+    if (gradientPresets) {
+        gradientPresets.innerHTML = GRADIENT_PRESETS.map((preset, index) => {
+            const gradient = getGradientCss(preset.direction, preset.start, preset.end);
+            return `
+                <button class="ms-gradient-swatch" type="button" data-gradient-index="${index}" style="background:${gradient}">
+                    <span>${preset.name}</span>
+                </button>
+            `;
+        }).join('');
+        gradientPresets.querySelectorAll('[data-gradient-index]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const index = Number.parseInt(button.dataset.gradientIndex, 10);
+                const preset = GRADIENT_PRESETS[index];
+                if (!preset) return;
+                window.currentGradientStart = preset.start;
+                window.currentGradientEnd = preset.end;
+                window.currentGradientDirection = preset.direction;
+                const gradient = getGradientCss(preset.direction, preset.start, preset.end);
+                window.updateCanvasGradient(gradient, {
+                    start: preset.start,
+                    end: preset.end,
+                    direction: preset.direction,
+                });
+                const startInput = document.getElementById('input-gradient-start');
+                const endInput = document.getElementById('input-gradient-end');
+                const startPreview = document.getElementById('preview-gradient-start');
+                const endPreview = document.getElementById('preview-gradient-end');
+                if (startInput) startInput.value = preset.start;
+                if (endInput) endInput.value = preset.end;
+                if (startPreview) startPreview.style.backgroundColor = preset.start;
+                if (endPreview) endPreview.style.backgroundColor = preset.end;
+                if (directionSelect) directionSelect.value = preset.direction;
+            });
+        });
+    }
+
+    if (directionSelect) {
+        directionSelect.addEventListener('change', (event) => {
+            window.currentGradientDirection = event.target.value;
+            const gradient = getGradientCss(
+                window.currentGradientDirection,
+                window.currentGradientStart || '#111827',
+                window.currentGradientEnd || '#f9fafb'
+            );
+            window.updateCanvasGradient(gradient, {
+                start: window.currentGradientStart || '#111827',
+                end: window.currentGradientEnd || '#f9fafb',
+                direction: window.currentGradientDirection,
+            });
+        });
+    }
+
+    const startInput = document.getElementById('input-gradient-start');
+    const endInput = document.getElementById('input-gradient-end');
+    window.currentGradientStart = startInput?.value || '#111827';
+    window.currentGradientEnd = endInput?.value || '#f9fafb';
+    window.currentGradientDirection = directionSelect?.value || 'to bottom';
+
  // 3. Drag Start (Sidebar Items)
     document.querySelectorAll('.ms-draggable-block').forEach(item => {
         item.addEventListener('dragstart', (e) => {
@@ -2655,6 +2725,11 @@ function updateBlockEditorTitle(title) {
 
 function openBlockEditor(block) {
     updateBlockEditorTitle(getBlockTypeLabel(block.type));
+    const stylesTabActive = document.querySelector('[data-sidebar-tab="styles"]')?.classList.contains('active');
+    if (stylesTabActive) {
+        window.activeBlockId = block.id;
+        return;
+    }
     // 1. Ensure all other panels are hidden specifically
     document.querySelectorAll('.ms-sidebar-panel').forEach(p => {
         p.classList.remove('active');
@@ -2766,9 +2841,15 @@ function openBlockEditor(block) {
                     <button class="ms-rte-btn" type="button" data-rte-command="insertUnorderedList" title="Bulleted list">• List</button>
                     <button class="ms-rte-btn" type="button" data-rte-command="insertOrderedList" title="Numbered list">1. List</button>
                     <span class="ms-rte-divider"></span>
-                    <button class="ms-rte-btn" type="button" data-rte-command="justifyLeft" title="Align left">↤</button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="justifyCenter" title="Align center">↔</button>
-                    <button class="ms-rte-btn" type="button" data-rte-command="justifyRight" title="Align right">↦</button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="justifyLeft" title="Align left">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                    </button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="justifyCenter" title="Align center">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12M4 12h16M6 18h12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                    </button>
+                    <button class="ms-rte-btn" type="button" data-rte-command="justifyRight" title="Align right">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M4 12h16M10 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                    </button>
                     <span class="ms-rte-divider"></span>
                     <button class="ms-rte-btn" type="button" data-rte-command="createLink" title="Insert link">🔗</button>
                     <button class="ms-rte-btn" type="button" data-rte-command="removeFormat" title="Clear formatting">✕</button>
@@ -2800,13 +2881,24 @@ function openBlockEditor(block) {
             block.content.text = editor.innerHTML;
             renderBuilderCanvas();
         });
-        container.querySelectorAll('[data-rte-command]').forEach((button) => {
+        container.querySelectorAll('button[data-rte-command]').forEach((button) => {
             button.addEventListener('click', () => {
                 const command = button.getAttribute('data-rte-command');
                 editor.focus();
                 if (command === 'createLink') {
                     const url = prompt('Enter a URL');
                     if (url) document.execCommand('createLink', false, url);
+                } else if (command === 'justifyLeft' || command === 'justifyCenter' || command === 'justifyRight') {
+                    const alignmentMap = {
+                        justifyLeft: 'left',
+                        justifyCenter: 'center',
+                        justifyRight: 'right',
+                    };
+                    applyAlignment(editor, alignmentMap[command]);
+                } else if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
+                    const currentAlignment = getAlignmentFromSelection(editor);
+                    document.execCommand(command, false, null);
+                    applyAlignment(editor, currentAlignment, { applyToAllOnCollapse: false });
                 } else {
                     document.execCommand(command, false, null);
                 }
@@ -2929,6 +3021,74 @@ function renderModernColorPicker(label, id, value, updateFunctionGlobalName) {
     </div>`;
 }
 
+const GRADIENT_PRESETS = [
+    { name: 'Soft gray', start: '#111827', end: '#f9fafb', direction: 'to bottom' },
+    { name: 'Slate haze', start: '#0f172a', end: '#94a3b8', direction: 'to bottom' },
+    { name: 'Misty blue', start: '#0ea5e9', end: '#e0f2fe', direction: 'to bottom' },
+    { name: 'Lavender', start: '#6366f1', end: '#e0e7ff', direction: 'to bottom' },
+    { name: 'Sunset', start: '#f97316', end: '#fde68a', direction: 'to right' },
+    { name: 'Vibrant purple', start: '#9333ea', end: '#f472b6', direction: '135deg' },
+];
+
+const ALIGN_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, div, blockquote';
+
+function getGradientCss(direction, start, end) {
+    return `linear-gradient(${direction}, ${start}, ${end})`;
+}
+
+function setAllBlocksAlignment(editor, alignment) {
+    const blocks = Array.from(editor.querySelectorAll(ALIGN_BLOCK_SELECTOR));
+    if (blocks.length) {
+        blocks.forEach((block) => {
+            block.style.textAlign = alignment;
+        });
+    } else {
+        editor.style.textAlign = alignment;
+    }
+}
+
+function getBlockElementsInRange(editor, range) {
+    const blocks = Array.from(editor.querySelectorAll(ALIGN_BLOCK_SELECTOR));
+    const selectedBlocks = blocks.filter((block) => range.intersectsNode(block));
+    if (selectedBlocks.length) return selectedBlocks;
+    const startContainer = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+    const closestBlock = startContainer?.closest?.(ALIGN_BLOCK_SELECTOR);
+    return closestBlock ? [closestBlock] : [];
+}
+
+function applyAlignment(editor, alignment, options = {}) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        setAllBlocksAlignment(editor, alignment);
+        return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const applyToAllOnCollapse = options.applyToAllOnCollapse !== false;
+    if (selection.isCollapsed && applyToAllOnCollapse) {
+        setAllBlocksAlignment(editor, alignment);
+        return;
+    }
+
+    const blocks = getBlockElementsInRange(editor, range);
+    if (blocks.length) {
+        blocks.forEach((block) => {
+            block.style.textAlign = alignment;
+        });
+    }
+}
+
+function getAlignmentFromSelection(editor) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return 'left';
+    const range = selection.getRangeAt(0);
+    const startContainer = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+    const block = startContainer?.closest?.(ALIGN_BLOCK_SELECTOR);
+    if (block && block.style.textAlign) return block.style.textAlign;
+    if (block) return window.getComputedStyle(block).textAlign || 'left';
+    return window.getComputedStyle(editor).textAlign || 'left';
+}
+
 // Global handlers for the color picker
 window.toggleColorPopover = function(id) {
     // Close all others first
@@ -2978,7 +3138,49 @@ window.updateCanvasBg = function(color) {
     const canvas = document.getElementById('ms-builder-canvas');
     if (canvas) {
         canvas.style.setProperty('--canvas-bg', color);
+        canvas.style.setProperty('--canvas-bg-image', 'none');
         window.currentTemplateStyles = window.currentTemplateStyles || {};
         window.currentTemplateStyles.canvasBg = color;
+        window.currentTemplateStyles.canvasGradient = null;
     }
+};
+
+window.updateCanvasGradient = function(gradient, payload = {}) {
+    const canvas = document.getElementById('ms-builder-canvas');
+    if (canvas) {
+        canvas.style.setProperty('--canvas-bg-image', gradient);
+        window.currentTemplateStyles = window.currentTemplateStyles || {};
+        window.currentTemplateStyles.canvasGradient = {
+            css: gradient,
+            ...payload,
+        };
+    }
+};
+
+window.updateGradientStart = function(color) {
+    window.currentGradientStart = color;
+    const gradient = getGradientCss(
+        window.currentGradientDirection || 'to bottom',
+        window.currentGradientStart || '#111827',
+        window.currentGradientEnd || '#f9fafb'
+    );
+    window.updateCanvasGradient(gradient, {
+        start: window.currentGradientStart,
+        end: window.currentGradientEnd,
+        direction: window.currentGradientDirection || 'to bottom',
+    });
+};
+
+window.updateGradientEnd = function(color) {
+    window.currentGradientEnd = color;
+    const gradient = getGradientCss(
+        window.currentGradientDirection || 'to bottom',
+        window.currentGradientStart || '#111827',
+        window.currentGradientEnd || '#f9fafb'
+    );
+    window.updateCanvasGradient(gradient, {
+        start: window.currentGradientStart,
+        end: window.currentGradientEnd,
+        direction: window.currentGradientDirection || 'to bottom',
+    });
 };

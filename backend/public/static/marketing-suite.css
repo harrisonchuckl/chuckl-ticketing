@@ -108,6 +108,7 @@ body {
 .ms-builder-canvas {
   width: 600px;
   background-color: var(--canvas-bg, #ffffff);
+  background-image: var(--canvas-bg-image, none);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   padding: 0;
   display: flex;
@@ -311,11 +312,19 @@ body {
   font-size: 12px;
   cursor: pointer;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ms-rte-btn:hover {
   border-color: var(--ms-primary);
   color: var(--ms-primary);
+}
+
+.ms-rte-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .ms-rte-divider {
@@ -371,6 +380,61 @@ body {
     width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.05); transition: transform 0.1s;
 }
 .ms-color-swatch:hover { transform: scale(1.1); z-index: 1; border-color: #cbd5e1; }
+
+.ms-sidebar-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.ms-gradient-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ms-gradient-swatch {
+  border: 1px solid var(--ms-border);
+  border-radius: 8px;
+  padding: 10px;
+  height: 48px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s;
+  background-size: cover;
+}
+
+.ms-gradient-swatch:hover {
+  border-color: var(--ms-primary);
+  transform: translateY(-1px);
+}
+
+.ms-gradient-swatch span {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 11px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.ms-gradient-custom {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ms-border);
+}
+
+.ms-gradient-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
 
 /* 8. UI UTILITIES */
 .ms-main { padding: 28px; display: flex; flex-direction: column; gap: 20px; }
