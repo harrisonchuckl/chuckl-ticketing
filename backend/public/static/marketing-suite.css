@@ -219,6 +219,11 @@ body {
   gap: 15px;
 }
 
+.ms-strip-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .ms-strip-inner {
   display: flex;
   flex-direction: column;
