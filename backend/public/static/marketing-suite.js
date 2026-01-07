@@ -2409,6 +2409,10 @@ function renderBuilderCanvas() {
  * NEW HELPER: Creates a block element with all listeners attached.
  * This function calls itself if it finds a "strip" with children.
  */
+/**
+ * NEW HELPER: Creates a block element with all listeners attached.
+ * This function calls itself if it finds a "strip" with children.
+ */
 function createBlockElement(block, index, parentArray) {
     const iconEdit = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
     const iconTrash = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
@@ -2416,57 +2420,23 @@ function createBlockElement(block, index, parentArray) {
 
     const el = document.createElement('div');
     el.className = 'ms-builder-block';
-  // --- STRIP EDITOR (Corrected & Merged) ---
-if (block.type === 'strip') {
-    container.innerHTML = `
-        <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
-            <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Strip Settings</div>
-            
-            ${renderModernColorPicker('Background Color', 'strip-bg', block.content.bgColor || '#ffffff', 'updateActiveBlockBg')}
-            
-            <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:12px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
-                <input type="checkbox" id="input-fullWidth" ${block.content.fullWidth ? 'checked' : ''} onchange="window.updateBlockProp('fullWidth', this.checked)" style="width:auto; margin:0;">
-                <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full Width Background</label>
-            </div>
-
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:16px;">
-                <div class="ms-field">
-                    <label>Padding (px)</label>
-                    <input type="number" id="input-padding" value="${parseInt(block.content.padding) || 20}" oninput="window.updateBlockProp('padding', this.value)">
-                </div>
-                <div class="ms-field">
-                    <label>Corner Radius</label>
-                    <input type="number" id="input-borderRadius" value="${parseInt(block.content.borderRadius) || 0}" oninput="window.updateBlockProp('borderRadius', this.value)">
-                </div>
-            </div>
-
-            <div class="ms-field" style="margin-top:8px;">
-                 <input type="range" id="slider-borderRadius" min="0" max="60" value="${parseInt(block.content.borderRadius) || 0}" style="width:100%; cursor: pointer;" oninput="window.updateBlockProp('borderRadius', this.value)">
-            </div>
-            
-            <div class="ms-muted" style="margin-top:12px; font-size:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
-                Adjust corner radius to create card-like designs or floating sections.
-            </div>
+    
+    // --- STRIP SPECIAL HANDLING ---
+    if (block.type === 'strip') {
+        // Get styles with defaults
+        const pad = block.content.padding !== undefined ? block.content.padding : '20px';
+        const radius = block.content.borderRadius !== undefined ? block.content.borderRadius : '0';
+        
+        el.innerHTML = `
+        <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
+            <div class="ms-strip-inner"></div>
         </div>
-    `;
-}
-    
- // --- STRIP SPECIAL HANDLING ---
-if (block.type === 'strip') {
-    // Get styles with defaults
-    const pad = block.content.padding !== undefined ? block.content.padding : '20px';
-    const radius = block.content.borderRadius !== undefined ? block.content.borderRadius : '0';
-    
-    el.innerHTML = `
-    <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
-        <div class="ms-strip-inner"></div>
-    </div>
-    <div class="block-actions">
-        <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
-    </div>
-    `;
-  
-  const innerContainer = el.querySelector('.ms-strip-inner');
+        <div class="block-actions">
+            <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
+        </div>
+        `;
+
+        const innerContainer = el.querySelector('.ms-strip-inner');
         // Recursively render children into this strip
         if (block.content.blocks) {
             block.content.blocks.forEach((child, childIdx) => {
@@ -2510,7 +2480,6 @@ if (block.type === 'strip') {
 
     return el;
 }
-
 /**
  * Helper to render the footer
  */
@@ -2600,7 +2569,7 @@ function openBlockEditor(block) {
     const container = document.getElementById('ms-active-block-settings');
     container.innerHTML = '';
 
-    // --- STRIP EDITOR (Updated Style) ---
+    // --- STRIP EDITOR (Corrected & Merged) ---
     if (block.type === 'strip') {
         container.innerHTML = `
             <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
@@ -2608,8 +2577,28 @@ function openBlockEditor(block) {
                 
                 ${renderModernColorPicker('Background Color', 'strip-bg', block.content.bgColor || '#ffffff', 'updateActiveBlockBg')}
                 
-                <div class="ms-muted" style="margin-top:8px; font-size:12px;">
-                    Strips span the full width of the email. Drop other blocks inside.
+                <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:12px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <input type="checkbox" id="input-fullWidth" ${block.content.fullWidth ? 'checked' : ''} onchange="window.updateBlockProp('fullWidth', this.checked)" style="width:auto; margin:0;">
+                    <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full Width Background</label>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:16px;">
+                    <div class="ms-field">
+                        <label>Padding (px)</label>
+                        <input type="number" id="input-padding" value="${parseInt(block.content.padding) || 20}" oninput="window.updateBlockProp('padding', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Corner Radius</label>
+                        <input type="number" id="input-borderRadius" value="${parseInt(block.content.borderRadius) || 0}" oninput="window.updateBlockProp('borderRadius', this.value)">
+                    </div>
+                </div>
+
+                <div class="ms-field" style="margin-top:8px;">
+                     <input type="range" id="slider-borderRadius" min="0" max="60" value="${parseInt(block.content.borderRadius) || 0}" style="width:100%; cursor: pointer;" oninput="window.updateBlockProp('borderRadius', this.value)">
+                </div>
+                
+                <div class="ms-muted" style="margin-top:12px; font-size:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
+                    Adjust corner radius to create card-like designs or floating sections.
                 </div>
             </div>
         `;
