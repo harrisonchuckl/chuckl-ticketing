@@ -3636,6 +3636,22 @@ function applyFontFamilyToBlock(block, fontFamily) {
     });
 }
 
+function applyFontFamilyToSelection(range, fontFamily) {
+    if (!range) return;
+    const fragment = range.extractContents();
+    const span = document.createElement('span');
+    span.style.fontFamily = fontFamily;
+    span.appendChild(fragment);
+    range.insertNode(span);
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.selectNodeContents(span);
+    selection.addRange(newRange);
+    savedRteSelection = newRange.cloneRange();
+}
+
 function applyFontFamily(editor, fontFamily) {
     const selection = window.getSelection();
     const primaryFont = getPrimaryFontFamily(fontFamily);
@@ -3666,20 +3682,13 @@ function applyFontFamily(editor, fontFamily) {
         return;
     }
     const blocks = getBlockElementsInRange(editor, activeRange);
-    if (blocks.length) {
+    if (blocks.length > 1) {
         blocks.forEach((block) => applyFontFamilyToBlock(block, fontFamily));
         return;
     }
-    const fragment = activeRange.extractContents();
-    const span = document.createElement('span');
-    span.style.fontFamily = fontFamily;
-    span.appendChild(fragment);
-    activeRange.insertNode(span);
     selection.removeAllRanges();
-    const newRange = document.createRange();
-    newRange.selectNodeContents(span);
-    selection.addRange(newRange);
-    savedRteSelection = newRange.cloneRange();
+    selection.addRange(activeRange);
+    applyFontFamilyToSelection(activeRange, fontFamily);
 }
 
 // Global handlers for the color picker
