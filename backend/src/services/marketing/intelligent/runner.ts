@@ -47,7 +47,7 @@ type IntelligentRunSuccess = {
 export type IntelligentRunResult = IntelligentRunFailure | IntelligentRunSuccess;
 
 export function resolveIntelligentConfig(configJson: Prisma.JsonValue | null | undefined) {
-  const fallback = { horizonDays: 90, limit: 6, cooldownDays: 30 };
+  const fallback = { horizonDays: 90, limit: 6, cooldownDays: 30, maxEmailsPer30DaysPerContact: 3 };
   if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) {
     return fallback;
   }
@@ -55,12 +55,16 @@ export function resolveIntelligentConfig(configJson: Prisma.JsonValue | null | u
   const horizonDaysRaw = config.recommendationHorizonDays ?? config.horizonDays ?? config.lookaheadDays;
   const limitRaw = config.recommendationLimit ?? config.limit ?? config.maxRecommendations;
   const cooldownDaysRaw = config.showCooldownDays ?? config.cooldownDays ?? config.recommendationCooldownDays;
+  const maxEmailsRaw = config.maxEmailsPer30DaysPerContact;
   const horizonDays = Number.isFinite(Number(horizonDaysRaw)) ? Math.max(1, Number(horizonDaysRaw)) : fallback.horizonDays;
   const limit = Number.isFinite(Number(limitRaw)) ? Math.max(1, Number(limitRaw)) : fallback.limit;
   const cooldownDays = Number.isFinite(Number(cooldownDaysRaw))
     ? Math.max(0, Number(cooldownDaysRaw))
     : fallback.cooldownDays;
-  return { horizonDays, limit, cooldownDays };
+  const maxEmailsPer30DaysPerContact = Number.isFinite(Number(maxEmailsRaw))
+    ? Math.max(0, Number(maxEmailsRaw))
+    : fallback.maxEmailsPer30DaysPerContact;
+  return { horizonDays, limit, cooldownDays, maxEmailsPer30DaysPerContact };
 }
 
 export function isWithinIntelligentSendWindow(configJson: Prisma.JsonValue | null | undefined, now: Date) {
@@ -143,6 +147,7 @@ export async function runIntelligentCampaign(options: {
   const suppressionMap = new Map(suppressions.map((suppression) => [normaliseEmail(suppression.email), suppression]));
 
   const configOptions = resolveIntelligentConfig(config.configJson);
+  const maxEmailsPer30DaysPerContact = configOptions.maxEmailsPer30DaysPerContact;
   const upcomingShows = await getTenantUpcomingShows(tenantId, configOptions.horizonDays);
 
   let eligibleCount = 0;
@@ -248,7 +253,7 @@ export async function runIntelligentCampaign(options: {
       continue;
     }
 
-    const sendCap = await countIntelligentSendsLast30d(tenantId, email);
+    const sendCap = await countIntelligentSendsLast30d(tenantId, email, maxEmailsPer30DaysPerContact);
     sendCap.reasons.forEach((reason) => reasons.add(reason));
 
     const topShowId = recommendedShows[0]?.showId;

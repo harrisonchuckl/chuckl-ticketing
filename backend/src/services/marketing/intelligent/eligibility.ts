@@ -22,13 +22,29 @@ function extractShowIdFromMergeContext(mergeContext: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-export async function countIntelligentSendsLast30d(tenantId: string, email: string): Promise<EligibilityResult> {
+export function resolveIntelligentSendCap(configJson: unknown) {
+  if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) {
+    return DEFAULT_INTELLIGENT_CAP_30D;
+  }
+  const config = configJson as Record<string, any>;
+  const raw = config.maxEmailsPer30DaysPerContact;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return DEFAULT_INTELLIGENT_CAP_30D;
+  return Math.max(0, value);
+}
+
+export async function countIntelligentSendsLast30d(
+  tenantId: string,
+  email: string,
+  maxEmailsPer30DaysPerContact = DEFAULT_INTELLIGENT_CAP_30D
+): Promise<EligibilityResult> {
   const normalizedEmail = normaliseEmail(email);
   if (!tenantId || !normalizedEmail) {
     return { eligible: false, reasons: ['missing_tenant_or_email'] };
   }
 
   const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const cap = Math.max(0, Number(maxEmailsPer30DaysPerContact) || 0);
 
   const count = await prisma.marketingEmailEvent.count({
     where: {
@@ -40,7 +56,7 @@ export async function countIntelligentSendsLast30d(tenantId: string, email: stri
     },
   });
 
-  if (count >= DEFAULT_INTELLIGENT_CAP_30D) {
+  if (count >= cap) {
     return {
       eligible: false,
       reasons: [`intelligent_send_cap_reached:${count}`],

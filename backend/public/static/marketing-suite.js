@@ -476,9 +476,29 @@ async function renderIntelligentCampaigns() {
         description: 'Suggested add-ons for recent purchasers.',
       },
     ];
-    const data = await fetchJson(`${API_BASE}/intelligent`);
+    const [data, report] = await Promise.all([
+      fetchJson(`${API_BASE}/intelligent`),
+      fetchJson(`${API_BASE}/intelligent/report?days=30`),
+    ]);
     const configs = data.items || [];
     const configMap = new Map(configs.map((config) => [config.kind, config]));
+    const reportItems = report?.items || [];
+    const statsMap = new Map(reportItems.map((item) => [item.kind, item]));
+    const statsRows = intelligentKinds
+      .map((item) => {
+        const stats = statsMap.get(item.kind) || {};
+        return `
+          <tr>
+            <td>${escapeHtml(item.label)}</td>
+            <td>${Number(stats.sent || 0).toLocaleString()}</td>
+            <td>${Number(stats.opened || 0).toLocaleString()}</td>
+            <td>${Number(stats.clicked || 0).toLocaleString()}</td>
+            <td>${Number(stats.bounced || 0).toLocaleString()}</td>
+            <td>${Number(stats.unsubscribed || 0).toLocaleString()}</td>
+          </tr>
+        `;
+      })
+      .join('');
 
     main.innerHTML = `
       <div class="ms-campaign-setup">
@@ -490,6 +510,23 @@ async function renderIntelligentCampaigns() {
                 <div class="ms-muted">Preview automated campaign content for a specific contact.</div>
               </div>
             </div>
+          </div>
+          <div class="ms-card">
+            <h3>Last 30 days performance</h3>
+            <div class="ms-muted">Aggregated intelligent campaign events per kind.</div>
+            <table class="ms-table" style="margin-top:12px;">
+              <thead>
+                <tr>
+                  <th>Kind</th>
+                  <th>Sent</th>
+                  <th>Opened</th>
+                  <th>Clicked</th>
+                  <th>Bounced</th>
+                  <th>Unsubscribed</th>
+                </tr>
+              </thead>
+              <tbody>${statsRows}</tbody>
+            </table>
           </div>
           <div class="ms-card">
             <h3>Contact</h3>
