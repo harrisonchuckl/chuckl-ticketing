@@ -902,6 +902,12 @@ async function renderTemplateEditor(templateId) {
   id: 'editor',
   label: 'Visual Editor',
   content: `
+  <div class="ms-visual-builder-toolbar">
+    <div class="ms-visual-toolbar-group">
+      <button class="ms-secondary" id="ms-editor-undo" type="button" disabled>Undo</button>
+      <button class="ms-secondary" id="ms-editor-redo" type="button" disabled>Redo</button>
+    </div>
+  </div>
   <div class="ms-visual-builder">
     <div class="ms-builder-canvas-wrapper">
       <div id="ms-builder-canvas" class="ms-builder-canvas">
@@ -1105,6 +1111,7 @@ window.updateBlockProp = function(prop, value) {
             if (input && input.value !== value) input.value = value;
             if (slider && slider.value !== value) slider.value = value;
 
+            recordEditorHistory({ immediate: false });
             renderBuilderCanvas();
         }
     }
@@ -1115,6 +1122,12 @@ window.updateBlockProp = function(prop, value) {
         const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
         if (block && block.content) {
             block.content.bgColor = color;
+            block.content.isTransparent = false;
+            const transparentToggle = document.getElementById('input-strip-transparent');
+            if (transparentToggle && transparentToggle.checked) {
+                transparentToggle.checked = false;
+            }
+            recordEditorHistory({ immediate: false });
             renderBuilderCanvas(); // Re-render to show change
         }
     }
@@ -1125,6 +1138,7 @@ window.updateActiveBlockColor = function(color) {
         const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
         if (block && block.content) {
             block.content.color = color;
+            recordEditorHistory({ immediate: false });
             renderBuilderCanvas();
         }
     }
@@ -1142,6 +1156,7 @@ window.updateActiveTextColor = function(color) {
     if (block && block.content) {
         block.content.color = color;
         block.content.text = editor.innerHTML;
+        recordEditorHistory({ immediate: false });
         renderBuilderCanvas();
     }
 };
@@ -1159,6 +1174,7 @@ window.updateActiveTextHighlight = function(color) {
     if (block && block.content) {
         block.content.highlightColor = color;
         block.content.text = editor.innerHTML;
+        recordEditorHistory({ immediate: false });
         renderBuilderCanvas();
     }
 };
@@ -2156,6 +2172,7 @@ window.duplicateBlock = function(index) {
     const copy = JSON.parse(JSON.stringify(original));
     assignNewIds(copy);
     window.editorBlocks.splice(index + 1, 0, copy);
+    recordEditorHistory();
     renderBuilderCanvas();
     toast('Block duplicated');
 };
@@ -2166,6 +2183,7 @@ window.duplicateBlockById = function(id) {
     const copy = JSON.parse(JSON.stringify(result.block));
     assignNewIds(copy);
     result.parent.splice(result.index + 1, 0, copy);
+    recordEditorHistory();
     renderBuilderCanvas();
     toast('Block duplicated');
 };
@@ -2186,6 +2204,14 @@ window.emailFooterState = {
     text: '<p style="font-size:12px; color:#6b7280; text-align:center;">© 2026 TixAll. All rights reserved.<br>You are receiving this email because you opted in via our website.<br><a href="{{links.unsubscribeLink}}" style="color:#4f46e5; text-decoration:underline;">Unsubscribe</a> | <a href="{{links.managePreferencesLink}}" style="color:#4f46e5; text-decoration:underline;">Manage Preferences</a></p>',
     bgColor: '#f8fafc'
 };
+
+const EDITOR_HISTORY_LIMIT = 60;
+const editorHistory = {
+    past: [],
+    future: [],
+    restoring: false,
+};
+let historyDebounce = null;
 
 let draggedSource = null;
 let draggedBlockIndex = null;
@@ -2261,6 +2287,20 @@ function setupVisualBuilder() {
   // 1. Initialize State
   window.editorBlocks = window.editorBlocks.length ? window.editorBlocks : [];
   renderBuilderCanvas();
+  initializeEditorHistory();
+
+  const undoBtn = document.getElementById('ms-editor-undo');
+  const redoBtn = document.getElementById('ms-editor-redo');
+  if (undoBtn) {
+      undoBtn.addEventListener('click', () => {
+          undoEditorChange();
+      });
+  }
+  if (redoBtn) {
+      redoBtn.addEventListener('click', () => {
+          redoEditorChange();
+      });
+  }
 
     // 2. Sidebar Tab Switching
     const tabBtns = document.querySelectorAll('.ms-tab-btn');
@@ -2428,6 +2468,7 @@ canvas.addEventListener('drop', (e) => {
         window.editorBlocks.splice(dropIndex, 0, blockData);
     }
 
+    recordEditorHistory();
     renderBuilderCanvas();
     draggedSource = null;
 });
@@ -2501,6 +2542,7 @@ function addBlockToCanvas(type, index) {
         window.editorBlocks.splice(index, 0, newBlock);
     }
 
+    recordEditorHistory();
     renderBuilderCanvas();
     openBlockEditor(newBlock);
 }
@@ -2530,6 +2572,7 @@ function moveBlockInCanvas(fromIndex, toIndex) {
     }
     
     window.editorBlocks.splice(finalIndex, 0, blockToMove);
+    recordEditorHistory();
     renderBuilderCanvas();
 }
 
@@ -2543,6 +2586,7 @@ function getDefaultBlockContent(type) {
     switch (type) {
 case 'strip': return { 
     bgColor: '#ffffff', 
+    isTransparent: false,
     blocks: [], 
     fullWidth: false,   // Kept your existing setting
     padding: '20px',    // Kept your existing setting
@@ -2588,6 +2632,95 @@ function renderBuilderCanvas() {
     renderStaticFooter(canvas);
 }
 
+function serializeEditorState() {
+    return {
+        blocks: JSON.parse(JSON.stringify(window.editorBlocks || [])),
+        footer: JSON.parse(JSON.stringify(window.emailFooterState || {})),
+        styles: JSON.parse(JSON.stringify(window.currentTemplateStyles || {})),
+    };
+}
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('ms-editor-undo');
+    const redoBtn = document.getElementById('ms-editor-redo');
+    if (undoBtn) undoBtn.disabled = editorHistory.past.length < 2;
+    if (redoBtn) redoBtn.disabled = editorHistory.future.length === 0;
+}
+
+function initializeEditorHistory() {
+    if (editorHistory.past.length) return;
+    const state = serializeEditorState();
+    editorHistory.past = [{ state, serialized: JSON.stringify(state) }];
+    editorHistory.future = [];
+    updateUndoRedoButtons();
+}
+
+function recordEditorHistory({ immediate = true } = {}) {
+    initializeEditorHistory();
+    if (editorHistory.restoring) return;
+    const record = () => {
+        const state = serializeEditorState();
+        const serialized = JSON.stringify(state);
+        const last = editorHistory.past[editorHistory.past.length - 1];
+        if (last && last.serialized === serialized) return;
+        editorHistory.past.push({ state, serialized });
+        if (editorHistory.past.length > EDITOR_HISTORY_LIMIT) {
+            editorHistory.past.shift();
+        }
+        editorHistory.future = [];
+        updateUndoRedoButtons();
+    };
+
+    if (immediate) {
+        record();
+    } else {
+        clearTimeout(historyDebounce);
+        historyDebounce = setTimeout(record, 200);
+    }
+}
+
+function resetEditorSelection() {
+    window.activeBlockId = null;
+    document.querySelectorAll('.ms-builder-block').forEach((block) => {
+        block.classList.remove('is-selected');
+    });
+    const editorPanel = document.getElementById('ms-block-editor');
+    const blocksPanel = document.getElementById('ms-sidebar-blocks');
+    if (editorPanel && blocksPanel) {
+        editorPanel.classList.add('hidden');
+        editorPanel.classList.remove('active');
+        editorPanel.style.display = 'none';
+        blocksPanel.classList.add('active');
+        blocksPanel.style.display = 'block';
+    }
+}
+
+function applyEditorState(state) {
+    editorHistory.restoring = true;
+    window.editorBlocks = JSON.parse(JSON.stringify(state.blocks || []));
+    window.emailFooterState = { ...window.emailFooterState, ...(state.footer || {}) };
+    window.currentTemplateStyles = state.styles || window.currentTemplateStyles;
+    renderBuilderCanvas();
+    resetEditorSelection();
+    editorHistory.restoring = false;
+    updateUndoRedoButtons();
+}
+
+function undoEditorChange() {
+    if (editorHistory.past.length < 2) return;
+    const current = editorHistory.past.pop();
+    editorHistory.future.push(current);
+    const previous = editorHistory.past[editorHistory.past.length - 1];
+    if (previous) applyEditorState(previous.state);
+}
+
+function redoEditorChange() {
+    if (editorHistory.future.length === 0) return;
+    const next = editorHistory.future.pop();
+    editorHistory.past.push(next);
+    applyEditorState(next.state);
+}
+
 /**
  * NEW HELPER: Creates a block element with all listeners attached.
  * This function calls itself if it finds a "strip" with children.
@@ -2612,6 +2745,7 @@ function createBlockElement(block, index, parentArray) {
         if (block.content.fullWidth) {
             el.classList.add('is-fullwidth');
         }
+        const isTransparent = Boolean(block.content.isTransparent);
         // Get styles with defaults
         const padValue = Number.parseInt(block.content.padding, 10);
         const radiusValue = Number.parseInt(block.content.borderRadius, 10);
@@ -2622,7 +2756,7 @@ function createBlockElement(block, index, parentArray) {
         
         el.innerHTML = `
         <div class="ms-strip-wrapper" style="padding: 0 ${margin}px;">
-            <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
+            <div class="ms-strip${isTransparent ? ' is-transparent' : ''}" style="background-color: ${isTransparent ? 'transparent' : block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
                 <div class="ms-strip-inner"></div>
             </div>
         </div>
@@ -2769,6 +2903,7 @@ window.deleteBlock = function(id) {
         blocksPanel.classList.add('active');
         blocksPanel.style.display = 'block';
     }
+    recordEditorHistory();
 }
 
 function getBlockTypeLabel(type) {
@@ -2822,6 +2957,10 @@ function openBlockEditor(block) {
                 <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:12px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
                     <input type="checkbox" id="input-fullWidth" ${block.content.fullWidth ? 'checked' : ''} onchange="window.updateBlockProp('fullWidth', this.checked)" style="width:auto; margin:0;">
                     <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full Width Background</label>
+                </div>
+                <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:10px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <input type="checkbox" id="input-strip-transparent" ${block.content.isTransparent ? 'checked' : ''} onchange="window.updateBlockProp('isTransparent', this.checked)" style="width:auto; margin:0;">
+                    <label style="margin:0; font-size:13px; cursor:pointer;" for="input-strip-transparent">Transparent background</label>
                 </div>
 
                 <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
@@ -3008,6 +3147,7 @@ function openBlockEditor(block) {
         editor.addEventListener('focus', updateSelectionState);
         editor.addEventListener('input', () => {
             block.content.text = editor.innerHTML;
+            recordEditorHistory({ immediate: false });
             renderBuilderCanvas();
         });
         container.querySelectorAll('button[data-rte-command]').forEach((button) => {
@@ -3033,6 +3173,7 @@ function openBlockEditor(block) {
                     document.execCommand(command, false, null);
                 }
                 block.content.text = editor.innerHTML;
+                recordEditorHistory();
                 renderBuilderCanvas();
                 saveSelection();
             });
@@ -3051,6 +3192,7 @@ function openBlockEditor(block) {
                     applyFontFamily(editor, fontFamily);
                 }
                 block.content.text = editor.innerHTML;
+                recordEditorHistory();
                 renderBuilderCanvas();
                 saveSelection();
                 updateSelectionState();
@@ -3064,8 +3206,16 @@ function openBlockEditor(block) {
             <div class="ms-field"><label>Link URL</label><input id="edit-btn-url" value="${block.content.url}"></div>
             <div class="ms-field"><label>Color</label><input type="color" id="edit-btn-color" value="${block.content.color}"></div>
         `;
-        container.querySelector('#edit-btn-label').addEventListener('input', (e) => { block.content.label = e.target.value; renderBuilderCanvas(); });
-        container.querySelector('#edit-btn-color').addEventListener('input', (e) => { block.content.color = e.target.value; renderBuilderCanvas(); });
+        container.querySelector('#edit-btn-label').addEventListener('input', (e) => {
+            block.content.label = e.target.value;
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+        });
+        container.querySelector('#edit-btn-color').addEventListener('input', (e) => {
+            block.content.color = e.target.value;
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+        });
     }
     // --- IMAGE EDITOR ---
     else if (block.type === 'image') {
@@ -3073,7 +3223,11 @@ function openBlockEditor(block) {
             <div class="ms-field"><label>Image URL</label><input id="edit-img-src" value="${block.content.src}"></div>
             <div class="ms-field"><label>Alt Text</label><input id="edit-img-alt" value="${block.content.alt}"></div>
         `;
-        container.querySelector('#edit-img-src').addEventListener('input', (e) => { block.content.src = e.target.value; renderBuilderCanvas(); });
+        container.querySelector('#edit-img-src').addEventListener('input', (e) => {
+            block.content.src = e.target.value;
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+        });
     }
     else {
         container.innerHTML = `<div class="ms-muted">No settings available for this block type yet.</div>`;
@@ -3112,10 +3266,12 @@ function openFooterEditor() {
 
     container.querySelector('#edit-footer-text').addEventListener('input', (e) => {
         window.emailFooterState.text = e.target.value;
+        recordEditorHistory({ immediate: false });
         renderBuilderCanvas();
     });
     container.querySelector('#edit-footer-bg').addEventListener('input', (e) => {
         window.emailFooterState.bgColor = e.target.value;
+        recordEditorHistory({ immediate: false });
         renderBuilderCanvas();
     });
 }
