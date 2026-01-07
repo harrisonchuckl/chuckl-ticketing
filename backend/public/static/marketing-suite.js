@@ -1068,11 +1068,20 @@ async function renderTemplateEditor(templateId) {
 setupVisualBuilder();
 setupColorPickerListeners(); // NEW: Initialize picker listeners
 
-
+function findBlockById(blocks, targetId) {
+    for (const block of blocks) {
+        if (block.id === targetId) return block;
+        if (block.type === 'strip' && block.content?.blocks?.length) {
+            const match = findBlockById(block.content.blocks, targetId);
+            if (match) return match;
+        }
+    }
+    return null;
+}
 
 window.updateBlockProp = function(prop, value) {
     if (window.activeBlockId) {
-        const block = window.editorBlocks.find(b => b.id === window.activeBlockId);
+        const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
         if (block && block.content) {
             block.content[prop] = value;
             
@@ -1089,10 +1098,20 @@ window.updateBlockProp = function(prop, value) {
     
     window.updateActiveBlockBg = function(color) {
     if (window.activeBlockId) {
-        const block = window.editorBlocks.find(b => b.id === window.activeBlockId);
+        const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
         if (block && block.content) {
             block.content.bgColor = color;
             renderBuilderCanvas(); // Re-render to show change
+        }
+    }
+};
+
+window.updateActiveBlockColor = function(color) {
+    if (window.activeBlockId) {
+        const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+        if (block && block.content) {
+            block.content.color = color;
+            renderBuilderCanvas();
         }
     }
 };
@@ -2386,7 +2405,13 @@ case 'strip': return {
         case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
         case 'imagecard': return { src: placeholderLarge, caption: '<p style="margin-top:10px;">Image caption goes here.</p>' };
         case 'button': return { label: 'Click Here', url: 'https://', color: '#4f46e5', align: 'center' };
-        case 'divider': return { color: '#e2e8f0', thickness: '1px' };
+        case 'divider': return {
+            color: '#e2e8f0',
+            thickness: 1,
+            lineStyle: 'solid',
+            paddingTop: 18,
+            paddingBottom: 18,
+        };
         case 'social': return { fb: '#', ig: '#', tw: '#' };
         case 'video': return { url: '', thumbnail: placeholderLarge };
         case 'code': return { html: '' };
@@ -2540,7 +2565,21 @@ function getPreviewHtml(block) {
         case 'imagecard': 
             return `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%; display:block;"><div style="padding:15px;">${c.caption}</div></div>`; 
         case 'button': return `<div style="text-align:${c.align};"><a class="ms-primary" style="background:${c.color};">${c.label}</a></div>`;
-        case 'divider': return `<hr style="border:0; border-top:${c.thickness} solid ${c.color}; margin:20px 0;">`;
+        case 'divider': {
+            const thicknessValue = Number.parseInt(c.thickness, 10);
+            const thickness = Number.isFinite(thicknessValue) ? thicknessValue : 1;
+            const paddingTopValue = Number.parseInt(c.paddingTop, 10);
+            const paddingTop = Number.isFinite(paddingTopValue) ? paddingTopValue : 18;
+            const paddingBottomValue = Number.parseInt(c.paddingBottom, 10);
+            const paddingBottom = Number.isFinite(paddingBottomValue) ? paddingBottomValue : 18;
+            const lineStyle = c.lineStyle || 'solid';
+            const lineColor = c.color || '#e2e8f0';
+            return `
+                <div style="padding-top:${paddingTop}px; padding-bottom:${paddingBottom}px;">
+                    <hr style="border:0; border-top:${thickness}px ${lineStyle} ${lineColor}; margin:0;">
+                </div>
+            `;
+        }
         case 'social': return `<div style="text-align:center; display:flex; justify-content:center; gap:10px;">Social Icons Placeholder</div>`;
         case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;">▶</div></div>`;
         case 'code': return `<div style="background:#f1f5f9; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code /&gt;</div>`;
@@ -2620,6 +2659,49 @@ function openBlockEditor(block) {
                 <div class="ms-muted" style="margin-top:12px; font-size:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
                     Adjust corner radius to create card-like designs or floating sections.
                 </div>
+            </div>
+        `;
+    }
+    else if (block.type === 'divider') {
+        const paddingTop = Number.isFinite(Number.parseInt(block.content.paddingTop, 10))
+            ? Number.parseInt(block.content.paddingTop, 10)
+            : 18;
+        const paddingBottom = Number.isFinite(Number.parseInt(block.content.paddingBottom, 10))
+            ? Number.parseInt(block.content.paddingBottom, 10)
+            : 18;
+        const thickness = Number.isFinite(Number.parseInt(block.content.thickness, 10))
+            ? Number.parseInt(block.content.thickness, 10)
+            : 1;
+        const lineStyle = block.content.lineStyle || 'solid';
+
+        container.innerHTML = `
+            <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
+                <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Divider Settings</div>
+
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <div class="ms-field">
+                        <label>Padding top (px)</label>
+                        <input type="number" id="input-paddingTop" value="${paddingTop}" oninput="window.updateBlockProp('paddingTop', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Padding bottom (px)</label>
+                        <input type="number" id="input-paddingBottom" value="${paddingBottom}" oninput="window.updateBlockProp('paddingBottom', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Line style</label>
+                        <select id="input-lineStyle" onchange="window.updateBlockProp('lineStyle', this.value)">
+                            <option value="solid" ${lineStyle === 'solid' ? 'selected' : ''}>Solid</option>
+                            <option value="dashed" ${lineStyle === 'dashed' ? 'selected' : ''}>Dashed</option>
+                            <option value="dotted" ${lineStyle === 'dotted' ? 'selected' : ''}>Dotted</option>
+                        </select>
+                    </div>
+                    <div class="ms-field">
+                        <label>Line thickness (px)</label>
+                        <input type="number" id="input-thickness" value="${thickness}" min="1" oninput="window.updateBlockProp('thickness', this.value)">
+                    </div>
+                </div>
+
+                ${renderModernColorPicker('Line Color', 'divider-line', block.content.color || '#e2e8f0', 'updateActiveBlockColor')}
             </div>
         `;
     }
