@@ -1045,6 +1045,8 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
   const templateId = hasOwn(payload, 'templateId') ? String(payload.templateId || '').trim() : undefined;
   const enabled = hasOwn(payload, 'enabled') ? Boolean(payload.enabled) : undefined;
   const configJson = hasOwn(payload, 'configJson') ? payload.configJson : undefined;
+  const configJsonInput =
+    configJson === undefined ? undefined : configJson === null ? Prisma.JsonNull : (configJson as Prisma.InputJsonValue);
   const lastRunAtRaw = hasOwn(payload, 'lastRunAt') ? payload.lastRunAt : undefined;
   const lastRunAt =
     lastRunAtRaw === undefined || lastRunAtRaw === null || lastRunAtRaw === ''
@@ -1061,7 +1063,7 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
 
   const existing = await prisma.marketingIntelligentCampaign.findFirst({
     where: { tenantId, kind },
-    select: { id: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+    select: { id: true, kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
   });
 
   if (!existing && (!templateId || configJson === undefined)) {
@@ -1070,15 +1072,10 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
     return res.status(400).json(response);
   }
 
-  const updateData: {
-    templateId?: string;
-    enabled?: boolean;
-    configJson?: Prisma.JsonValue;
-    lastRunAt?: Date | null;
-  } = {};
+  const updateData: Prisma.MarketingIntelligentCampaignUncheckedUpdateInput = {};
   if (templateId !== undefined) updateData.templateId = templateId;
   if (enabled !== undefined) updateData.enabled = enabled;
-  if (configJson !== undefined) updateData.configJson = configJson;
+  if (configJsonInput !== undefined) updateData.configJson = configJsonInput;
   if (lastRunAt !== undefined) updateData.lastRunAt = lastRunAt;
 
   let record = existing;
@@ -1088,7 +1085,7 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
         tenantId,
         kind,
         templateId: templateId as string,
-        configJson: configJson as Prisma.JsonValue,
+        configJson: configJsonInput as Prisma.InputJsonValue | Prisma.JsonNull,
         enabled: enabled ?? true,
         lastRunAt: lastRunAt ?? null,
       },
