@@ -203,6 +203,55 @@ function tenantNameFrom(user: { tradingName?: string | null; companyName?: strin
   return user.tradingName || user.companyName || user.name || 'TIXL';
 }
 
+const DEFAULT_INTELLIGENT_CONFIG = {
+  horizonDays: 90,
+  limit: 6,
+  cooldownDays: 30,
+  maxEmailsPer30DaysPerContact: 3,
+};
+
+async function ensureIntelligentSeedTemplate(tenantId: string) {
+  const existingTemplate = await prisma.marketingTemplate.findFirst({
+    where: { tenantId },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true },
+  });
+  if (existingTemplate) return existingTemplate;
+
+  const tenant = await prisma.user.findUnique({
+    where: { id: tenantId },
+    select: { tradingName: true, companyName: true, name: true },
+  });
+  const settings = await prisma.marketingSettings.findUnique({
+    where: { tenantId },
+    select: { defaultFromEmail: true, defaultFromName: true },
+  });
+  const fromName = settings?.defaultFromName || tenantNameFrom(tenant || {});
+  const fromEmail =
+    settings?.defaultFromEmail || process.env.EMAIL_FROM || process.env.FROM_EMAIL || 'noreply@chuckl.co.uk';
+  return prisma.marketingTemplate.create({
+    data: {
+      tenantId,
+      name: 'Intelligent Campaign Template',
+      subject: 'Your latest recommendations',
+      fromName,
+      fromEmail,
+      replyTo: fromEmail,
+      mjmlBody: `<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="18px">Your latest recommendations</mj-text>
+        <mj-text>Update this template to customise your intelligent campaigns.</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>`,
+    },
+    select: { id: true },
+  });
+}
+
 function formatShowDate(date?: Date | string | null) {
   if (!date) return '';
   const value = typeof date === 'string' ? new Date(date) : date;
@@ -1024,12 +1073,50 @@ router.get('/api/marketing/status', requireAdminOrOrganiser, async (req, res) =>
 
 router.get('/api/marketing/intelligent', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
+  console.info('[marketing:intelligent:get] request', { tenantId, actor: actorFrom(req) });
   const items = await prisma.marketingIntelligentCampaign.findMany({
     where: { tenantId },
     orderBy: { updatedAt: 'desc' },
     select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
   });
-  const response = { ok: true, items };
+  const existingMap = new Map(items.map((item) => [item.kind, item]));
+  const allKinds = Object.values(MarketingIntelligentCampaignKind);
+  const missingKinds = allKinds.filter((kind) => !existingMap.has(kind));
+
+  let seededCount = 0;
+  if (missingKinds.length) {
+    const template = await ensureIntelligentSeedTemplate(tenantId);
+    const created = await Promise.all(
+      missingKinds.map((kind) =>
+        prisma.marketingIntelligentCampaign.create({
+          data: {
+            tenantId,
+            kind,
+            enabled: false,
+            templateId: template.id,
+            configJson: DEFAULT_INTELLIGENT_CONFIG,
+          },
+          select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+        })
+      )
+    );
+    created.forEach((record) => existingMap.set(record.kind, record));
+    seededCount = created.length;
+  }
+
+  const orderedItems = allKinds.map((kind) => {
+    const record = existingMap.get(kind);
+    return {
+      kind,
+      configJson: record?.configJson ?? DEFAULT_INTELLIGENT_CONFIG,
+      enabled: record?.enabled ?? false,
+      templateId: record?.templateId ?? '',
+      lastRunAt: record?.lastRunAt ?? null,
+    };
+  });
+
+  const response = { ok: true, items: orderedItems };
+  console.info('[marketing:intelligent:get] response', { tenantId, seededCount, total: orderedItems.length });
   logMarketingApi(req, response);
   res.json(response);
 });
@@ -1122,6 +1209,7 @@ router.get('/api/marketing/intelligent/report', requireAdminOrOrganiser, async (
 
 router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
+  console.info('[marketing:intelligent:put] request', { tenantId, actor: actorFrom(req), body: req.body });
   const rawKind = String(req.params.kind || '').trim().toUpperCase();
   const kind = Object.values(MarketingIntelligentCampaignKind).includes(rawKind as MarketingIntelligentCampaignKind)
     ? (rawKind as MarketingIntelligentCampaignKind)
@@ -1202,6 +1290,12 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
       lastRunAt: record?.lastRunAt ?? existing?.lastRunAt ?? null,
     },
   };
+  console.info('[marketing:intelligent:put] response', {
+    tenantId,
+    kind,
+    enabled: response.config.enabled,
+    templateId: response.config.templateId,
+  });
   logMarketingApi(req, response);
   res.json(response);
 });

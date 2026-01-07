@@ -453,6 +453,31 @@ async function renderIntelligentCampaigns() {
   const main = document.getElementById('ms-main');
   main.innerHTML = '<div class="ms-card">Loading intelligent campaigns...</div>';
 
+  async function fetchJsonDetailed(url, opts = {}) {
+    const method = String(opts.method || 'GET').toUpperCase();
+    console.log('[marketing-suite] request', { url, method });
+    const res = await fetch(url, { credentials: 'include', ...opts });
+    const text = await res.text();
+    let data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        data = {};
+      }
+    }
+    console.log('[marketing-suite] response', { url, method, status: res.status, payload: truncatePayload(data) });
+    if (!res.ok || data.ok === false) {
+      const message = data.message || data.error || text || 'Request failed';
+      const error = new Error(message);
+      error.status = res.status;
+      error.responseText = text;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
+
   try {
     const intelligentKinds = [
       {
@@ -476,14 +501,16 @@ async function renderIntelligentCampaigns() {
         description: 'Suggested add-ons for recent purchasers.',
       },
     ];
-    const [data, report] = await Promise.all([
-      fetchJson(`${API_BASE}/intelligent`),
-      fetchJson(`${API_BASE}/intelligent/report?days=30`),
+    const [data, report, templatesData] = await Promise.all([
+      fetchJsonDetailed(`${API_BASE}/intelligent`),
+      fetchJsonDetailed(`${API_BASE}/intelligent/report?days=30`),
+      fetchJsonDetailed(`${API_BASE}/templates`),
     ]);
     const configs = data.items || [];
     const configMap = new Map(configs.map((config) => [config.kind, config]));
     const reportItems = report?.items || [];
     const statsMap = new Map(reportItems.map((item) => [item.kind, item]));
+    const templates = templatesData.items || [];
     const statsRows = intelligentKinds
       .map((item) => {
         const stats = statsMap.get(item.kind) || {};
@@ -499,6 +526,19 @@ async function renderIntelligentCampaigns() {
         `;
       })
       .join('');
+    const templateOptions = templates.length
+      ? templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name)}</option>`).join('')
+      : '<option value="">No templates available</option>';
+
+    function normalizeConfig(configJson) {
+      const fallback = { horizonDays: 90, maxPer30d: 3 };
+      if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) return fallback;
+      const horizonRaw = configJson.horizonDays ?? configJson.lookaheadDays;
+      const maxRaw = configJson.maxPer30d ?? configJson.maxEmailsPer30DaysPerContact;
+      const horizonDays = Number.isFinite(Number(horizonRaw)) ? Math.max(1, Number(horizonRaw)) : fallback.horizonDays;
+      const maxPer30d = Number.isFinite(Number(maxRaw)) ? Math.max(0, Number(maxRaw)) : fallback.maxPer30d;
+      return { horizonDays, maxPer30d };
+    }
 
     main.innerHTML = `
       <div class="ms-campaign-setup">
@@ -507,8 +547,60 @@ async function renderIntelligentCampaigns() {
             <div class="ms-toolbar" style="justify-content:space-between;">
               <div>
                 <h2>Intelligent Campaigns</h2>
-                <div class="ms-muted">Preview automated campaign content for a specific contact.</div>
+                <div class="ms-muted">Configure and preview automated campaign content for a specific contact.</div>
               </div>
+            </div>
+          </div>
+          <div class="ms-card">
+            <h3>Campaign configuration</h3>
+            <div class="ms-muted">Choose templates and guardrails for each intelligent campaign.</div>
+            <div class="ms-grid cols-2" style="margin-top:12px;">
+              ${intelligentKinds
+                .map((item) => {
+                  const config = configMap.get(item.kind) || {};
+                  const configValues = normalizeConfig(config.configJson);
+                  return `
+                    <div class="ms-card" data-intelligent-card="${item.kind}" style="margin:0;">
+                      <div class="ms-toolbar" style="justify-content:space-between;">
+                        <div>
+                          <strong>${escapeHtml(item.label)}</strong>
+                          <div class="ms-muted">${escapeHtml(item.description)}</div>
+                        </div>
+                      </div>
+                      <div class="ms-grid cols-2" style="margin-top:12px;">
+                        ${renderFormRow(
+                          'Enabled',
+                          `<label class="ms-checkbox-row">
+                            <input type="checkbox" data-intelligent-enabled ${config.enabled ? 'checked' : ''} />
+                            Enable campaign
+                          </label>`
+                        )}
+                        ${renderFormRow(
+                          'Template',
+                          `<select data-intelligent-template ${templates.length ? '' : 'disabled'}>
+                            <option value="">Select template</option>
+                            ${templateOptions}
+                          </select>`
+                        )}
+                        ${renderFormRow(
+                          'Max emails per 30 days',
+                          `<input type="number" min="0" data-intelligent-max value="${configValues.maxPer30d}" />`,
+                          'Limit per contact for the last 30 days.'
+                        )}
+                        ${renderFormRow(
+                          'Recommendation horizon (days)',
+                          `<input type="number" min="1" data-intelligent-horizon value="${configValues.horizonDays}" />`,
+                          'How far ahead to look for shows.'
+                        )}
+                      </div>
+                      <div class="ms-toolbar" style="justify-content:flex-end;margin-top:8px;">
+                        <button class="ms-primary" data-intelligent-save>Save</button>
+                      </div>
+                      <div class="ms-muted" data-intelligent-status></div>
+                    </div>
+                  `;
+                })
+                .join('')}
             </div>
           </div>
           <div class="ms-card">
@@ -554,7 +646,7 @@ async function renderIntelligentCampaigns() {
                       <div>
                         <strong>${escapeHtml(item.label)}</strong>
                         <div class="ms-muted">${escapeHtml(item.description)}</div>
-                        <div class="ms-muted">Status: ${escapeHtml(statusLabel)}</div>
+                        <div class="ms-muted">Status: <span data-intelligent-status-label="${item.kind}">${escapeHtml(statusLabel)}</span></div>
                       </div>
                       <button class="ms-secondary" data-intelligent-preview="${item.kind}">Preview</button>
                     </div>
@@ -636,6 +728,58 @@ async function renderIntelligentCampaigns() {
       updatePreviewContact();
     });
 
+    main.querySelectorAll('[data-intelligent-card]').forEach((card) => {
+      const kind = card.getAttribute('data-intelligent-card');
+      const enabledInput = card.querySelector('[data-intelligent-enabled]');
+      const templateSelect = card.querySelector('[data-intelligent-template]');
+      const maxInput = card.querySelector('[data-intelligent-max]');
+      const horizonInput = card.querySelector('[data-intelligent-horizon]');
+      const statusEl = card.querySelector('[data-intelligent-status]');
+      const saveButton = card.querySelector('[data-intelligent-save]');
+
+      const config = configMap.get(kind) || {};
+      if (templateSelect && config.templateId) templateSelect.value = config.templateId;
+
+      if (saveButton) {
+        saveButton.addEventListener('click', async () => {
+          if (statusEl) statusEl.textContent = '';
+          saveButton.setAttribute('disabled', 'true');
+          const horizonDays = Number(horizonInput?.value || 0);
+          const maxPer30d = Number(maxInput?.value || 0);
+          const existingConfig = configMap.get(kind) || {};
+          const configJson =
+            existingConfig.configJson && typeof existingConfig.configJson === 'object' && !Array.isArray(existingConfig.configJson)
+              ? { ...existingConfig.configJson }
+              : {};
+          configJson.horizonDays = Number.isFinite(horizonDays) && horizonDays > 0 ? horizonDays : 90;
+          configJson.maxEmailsPer30DaysPerContact = Number.isFinite(maxPer30d) && maxPer30d >= 0 ? maxPer30d : 3;
+          try {
+            const payload = {
+              enabled: Boolean(enabledInput?.checked),
+              templateId: String(templateSelect?.value || '').trim(),
+              configJson,
+            };
+            const response = await fetchJson(`${API_BASE}/intelligent/${kind}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const updated = response.config || {};
+            configMap.set(kind, updated);
+            const statusLabel = document.querySelector(`[data-intelligent-status-label="${kind}"]`);
+            if (statusLabel) statusLabel.textContent = updated.templateId ? 'Configured' : 'Not configured';
+            if (statusEl) statusEl.textContent = 'Saved.';
+            toast('Intelligent campaign saved.', 'success');
+          } catch (error) {
+            if (statusEl) statusEl.textContent = error.message || 'Save failed.';
+            toast(error.message || 'Save failed.', 'warning');
+          } finally {
+            saveButton.removeAttribute('disabled');
+          }
+        });
+      }
+    });
+
     main.querySelectorAll('[data-intelligent-preview]').forEach((button) => {
       button.addEventListener('click', async () => {
         const kind = button.getAttribute('data-intelligent-preview');
@@ -667,7 +811,21 @@ async function renderIntelligentCampaigns() {
     });
   } catch (error) {
     console.error('[marketing-suite] intelligent campaigns load failed', error);
-    showErrorState(main, "Couldn't load intelligent campaigns", error, renderIntelligentCampaigns);
+    const status = error?.status ? `Status ${error.status}` : 'Status unavailable';
+    const responseText = error?.responseText ? error.responseText : error?.message || 'Unknown error';
+    main.innerHTML = `
+      <div class="ms-card" style="border:1px solid #f87171;background:#fff7f7;">
+        <h2>Couldn't load intelligent campaigns</h2>
+        <div class="ms-muted">We hit an API error while loading this page.</div>
+        <div style="margin-top:12px;font-weight:600;">${escapeHtml(status)}</div>
+        <pre style="white-space:pre-wrap;margin-top:8px;">${escapeHtml(responseText)}</pre>
+        <div class="ms-toolbar" style="justify-content:flex-end;margin-top:12px;">
+          <button class="ms-secondary" data-action="retry">Retry</button>
+        </div>
+      </div>
+    `;
+    const retryButton = main.querySelector('[data-action="retry"]');
+    if (retryButton) retryButton.addEventListener('click', renderIntelligentCampaigns);
   }
 }
 
