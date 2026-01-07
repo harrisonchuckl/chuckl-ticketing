@@ -2252,6 +2252,15 @@ const FONT_FAMILY_MAP = {
     'Fira Sans': '"Fira Sans", "Helvetica Neue", Arial, sans-serif',
 };
 
+const TEXT_STYLE_PRESETS = [
+    { value: 'paragraph-1', label: 'Paragraph 1', tag: 'p', fontSize: '16px', fontWeight: '400', lineHeight: '1.6' },
+    { value: 'paragraph-2', label: 'Paragraph 2', tag: 'p', fontSize: '14px', fontWeight: '400', lineHeight: '1.5' },
+    { value: 'heading-1', label: 'Heading 1', tag: 'h1', fontSize: '32px', fontWeight: '700', lineHeight: '1.2' },
+    { value: 'heading-2', label: 'Heading 2', tag: 'h2', fontSize: '24px', fontWeight: '700', lineHeight: '1.25' },
+    { value: 'heading-3', label: 'Heading 3', tag: 'h3', fontSize: '20px', fontWeight: '600', lineHeight: '1.3' },
+    { value: 'heading-4', label: 'Heading 4', tag: 'h4', fontSize: '18px', fontWeight: '600', lineHeight: '1.3' },
+];
+
 // Helper to generate SVG data URI for placeholders
 function getPlaceholderImage(width, height) {
     const svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -3080,6 +3089,9 @@ function openBlockEditor(block) {
                     <span class="ms-rte-divider"></span>
                     <button class="ms-rte-btn" type="button" data-rte-command="createLink" title="Insert link">🔗</button>
                     <button class="ms-rte-btn" type="button" data-rte-command="removeFormat" title="Clear formatting">✕</button>
+                    <select class="ms-rte-select" data-rte-command="textStyle" aria-label="Text style">
+                        ${TEXT_STYLE_PRESETS.map((preset) => `<option value="${preset.value}">${preset.label}</option>`).join('')}
+                    </select>
                     <select class="ms-rte-select" data-rte-command="fontName" aria-label="Font family">
                         <option value="Arial">Arial</option>
                         <option value="Helvetica">Helvetica</option>
@@ -3120,6 +3132,10 @@ function openBlockEditor(block) {
                         <option value="24">24px</option>
                         <option value="32">32px</option>
                     </select>
+                    <div class="ms-rte-line-spacing" role="group" aria-label="Line spacing">
+                        <button class="ms-rte-btn" type="button" data-rte-command="lineHeightDecrease" title="Decrease line spacing">A-</button>
+                        <button class="ms-rte-btn" type="button" data-rte-command="lineHeightIncrease" title="Increase line spacing">A+</button>
+                    </div>
                 </div>
                 <div id="ms-text-editor" class="ms-rte-editor" contenteditable="true">${block.content.text || ''}</div>
             </div>
@@ -3207,6 +3223,9 @@ function openBlockEditor(block) {
                 if (command === 'createLink') {
                     const url = prompt('Enter a URL');
                     if (url) document.execCommand('createLink', false, url);
+                } else if (command === 'lineHeightIncrease' || command === 'lineHeightDecrease') {
+                    const delta = command === 'lineHeightIncrease' ? 0.1 : -0.1;
+                    applyLineHeight(editor, delta);
                 } else if (command === 'justifyLeft' || command === 'justifyCenter' || command === 'justifyRight') {
                     const alignmentMap = {
                         justifyLeft: 'left',
@@ -3232,7 +3251,9 @@ function openBlockEditor(block) {
             select.addEventListener('change', (event) => {
                 const command = select.getAttribute('data-rte-command');
                 restoreRteSelection(editor);
-                if (command === 'fontSize') {
+                if (command === 'textStyle') {
+                    applyTextStyle(editor, event.target.value);
+                } else if (command === 'fontSize') {
                     const value = Number.parseInt(event.target.value, 10);
                     const sizeMap = { 12: 2, 14: 3, 16: 3, 18: 4, 24: 5, 32: 6 };
                     document.execCommand('fontSize', false, sizeMap[value] || 3);
@@ -3394,6 +3415,7 @@ const GRADIENT_PRESETS = [
 ];
 
 const ALIGN_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, div, blockquote';
+const TEXT_STYLE_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, div, blockquote';
 
 function getGradientCss(direction, start, end) {
     return `linear-gradient(${direction}, ${start}, ${end})`;
@@ -3420,6 +3442,15 @@ function getBlockElementsInRange(editor, range) {
     return closestBlock ? [closestBlock] : [];
 }
 
+function getTextStyleBlocksInRange(editor, range) {
+    const blocks = Array.from(editor.querySelectorAll(TEXT_STYLE_BLOCK_SELECTOR));
+    const selectedBlocks = blocks.filter((block) => range.intersectsNode(block));
+    if (selectedBlocks.length) return selectedBlocks;
+    const startContainer = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+    const closestBlock = startContainer?.closest?.(TEXT_STYLE_BLOCK_SELECTOR);
+    return closestBlock ? [closestBlock] : [];
+}
+
 function applyAlignment(editor, alignment, options = {}) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
@@ -3441,6 +3472,70 @@ function applyAlignment(editor, alignment, options = {}) {
             alignListItem(block, alignment);
         });
     }
+}
+
+function replaceBlockTag(block, tagName) {
+    const replacement = document.createElement(tagName);
+    replacement.innerHTML = block.innerHTML;
+    replacement.className = block.className;
+    replacement.style.cssText = block.style.cssText;
+    Array.from(block.attributes).forEach((attr) => {
+        if (attr.name === 'class' || attr.name === 'style') return;
+        replacement.setAttribute(attr.name, attr.value);
+    });
+    block.replaceWith(replacement);
+    return replacement;
+}
+
+function applyTextStyle(editor, styleKey, options = {}) {
+    const preset = TEXT_STYLE_PRESETS.find((item) => item.value === styleKey);
+    if (!preset) return;
+    const selection = window.getSelection();
+    const applyToAllOnCollapse = options.applyToAllOnCollapse !== false;
+    let blocks = [];
+    if (!selection || selection.rangeCount === 0) {
+        blocks = Array.from(editor.querySelectorAll(TEXT_STYLE_BLOCK_SELECTOR));
+    } else {
+        const range = selection.getRangeAt(0);
+        if (selection.isCollapsed && applyToAllOnCollapse) {
+            blocks = Array.from(editor.querySelectorAll(TEXT_STYLE_BLOCK_SELECTOR));
+        } else {
+            blocks = getTextStyleBlocksInRange(editor, range);
+        }
+    }
+
+    blocks.forEach((block) => {
+        const tag = block.tagName.toLowerCase();
+        if (tag === 'li' || tag === 'ul' || tag === 'ol') return;
+        const target = tag === preset.tag ? block : replaceBlockTag(block, preset.tag);
+        if (preset.fontSize) target.style.fontSize = preset.fontSize;
+        if (preset.fontWeight) target.style.fontWeight = preset.fontWeight;
+        if (preset.lineHeight) target.style.lineHeight = preset.lineHeight;
+    });
+}
+
+function applyLineHeight(editor, delta, options = {}) {
+    const selection = window.getSelection();
+    const applyToAllOnCollapse = options.applyToAllOnCollapse !== false;
+    let blocks = [];
+    if (!selection || selection.rangeCount === 0) {
+        blocks = Array.from(editor.querySelectorAll(ALIGN_BLOCK_SELECTOR));
+    } else {
+        const range = selection.getRangeAt(0);
+        if (selection.isCollapsed && applyToAllOnCollapse) {
+            blocks = Array.from(editor.querySelectorAll(ALIGN_BLOCK_SELECTOR));
+        } else {
+            blocks = getBlockElementsInRange(editor, range);
+        }
+    }
+    blocks.forEach((block) => {
+        const computed = window.getComputedStyle(block);
+        const fontSize = Number.parseFloat(computed.fontSize) || 16;
+        const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.5;
+        const currentRatio = lineHeight / fontSize;
+        const nextRatio = Math.min(3, Math.max(1, currentRatio + delta));
+        block.style.lineHeight = nextRatio.toFixed(2);
+    });
 }
 
 function getAlignmentFromSelection(editor) {
@@ -3533,6 +3628,14 @@ function applyFontFamilyToAll(editor, fontFamily) {
     });
 }
 
+function applyFontFamilyToBlock(block, fontFamily) {
+    if (!block) return;
+    block.style.fontFamily = fontFamily;
+    block.querySelectorAll('*').forEach((node) => {
+        node.style.fontFamily = fontFamily;
+    });
+}
+
 function applyFontFamily(editor, fontFamily) {
     const selection = window.getSelection();
     const primaryFont = getPrimaryFontFamily(fontFamily);
@@ -3560,6 +3663,11 @@ function applyFontFamily(editor, fontFamily) {
         editor.focus();
         document.execCommand('styleWithCSS', false, true);
         document.execCommand('fontName', false, primaryFont || fontFamily);
+        return;
+    }
+    const blocks = getBlockElementsInRange(editor, activeRange);
+    if (blocks.length) {
+        blocks.forEach((block) => applyFontFamilyToBlock(block, fontFamily));
         return;
     }
     const fragment = activeRange.extractContents();
