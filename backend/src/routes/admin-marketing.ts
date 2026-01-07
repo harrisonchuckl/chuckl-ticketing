@@ -11,7 +11,7 @@ import { getEmailProvider } from '../lib/email-marketing/index.js';
 import { createUnsubscribeToken } from '../lib/email-marketing/unsubscribe.js';
 import { createPreferencesToken } from '../lib/email-marketing/preferences.js';
 import { encryptToken } from '../lib/token-crypto.js';
-import { buildDefaultMergeContext } from '../lib/email-marketing/merge-tags.js';
+import { buildDefaultMergeContext, renderMergeTags } from '../lib/email-marketing/merge-tags.js';
 import {
   MarketingAutomationStepType,
   MarketingAutomationTriggerType,
@@ -69,6 +69,10 @@ import { buildPreviewPersonalisationContext } from '../services/marketing/person
 import { compileEditorHtml, renderCompiledTemplate } from '../services/marketing/template-compiler.js';
 import { buildStepsFromFlow, validateFlow } from '../services/marketing/flow.js';
 import { sendMarketingSuiteShell } from '../lib/marketing-suite-shell.js';
+import { buildRecommendedShowsHtml as buildIntelligentShowsHtml } from '../services/marketing/intelligent/blocks.js';
+import { countIntelligentSendsLast30d, hasEmailedShowRecently } from '../services/marketing/intelligent/eligibility.js';
+import { getTenantUpcomingShows, rankShowsForContact } from '../services/marketing/intelligent/recommendations.js';
+import { hasPurchasedShow } from '../services/marketing/intelligent/suppression.js';
 const router = Router();
 const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
@@ -749,6 +753,23 @@ function isValidEmail(email: string) {
   return Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
 }
 
+function resolveIntelligentConfig(configJson: Prisma.JsonValue | null | undefined) {
+  const fallback = { horizonDays: 90, limit: 6, cooldownDays: 30 };
+  if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) {
+    return fallback;
+  }
+  const config = configJson as Record<string, any>;
+  const horizonDaysRaw = config.recommendationHorizonDays ?? config.horizonDays ?? config.lookaheadDays;
+  const limitRaw = config.recommendationLimit ?? config.limit ?? config.maxRecommendations;
+  const cooldownDaysRaw = config.showCooldownDays ?? config.cooldownDays ?? config.recommendationCooldownDays;
+  const horizonDays = Number.isFinite(Number(horizonDaysRaw)) ? Math.max(1, Number(horizonDaysRaw)) : fallback.horizonDays;
+  const limit = Number.isFinite(Number(limitRaw)) ? Math.max(1, Number(limitRaw)) : fallback.limit;
+  const cooldownDays = Number.isFinite(Number(cooldownDaysRaw))
+    ? Math.max(0, Number(cooldownDaysRaw))
+    : fallback.cooldownDays;
+  return { horizonDays, limit, cooldownDays };
+}
+
 function canOverrideTenant(req: any) {
   const role = String(req.user?.role || '').trim().toUpperCase();
   return role === 'ADMIN' || isOwnerEmail(req.user?.email);
@@ -1113,6 +1134,170 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
   };
   logMarketingApi(req, response);
   res.json(response);
+});
+
+router.post('/api/marketing/intelligent/:kind/preview', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const rawKind = String(req.params.kind || '').trim().toUpperCase();
+  const kind = Object.values(MarketingIntelligentCampaignKind).includes(rawKind as MarketingIntelligentCampaignKind)
+    ? (rawKind as MarketingIntelligentCampaignKind)
+    : null;
+  if (!kind) {
+    return res.status(400).json({ ok: false, message: 'Invalid intelligent campaign kind.' });
+  }
+
+  const config = await prisma.marketingIntelligentCampaign.findFirst({
+    where: { tenantId, kind },
+    include: { template: true },
+  });
+  if (!config || !config.template) {
+    return res.status(404).json({ ok: false, message: 'Intelligent campaign not configured.' });
+  }
+
+  const contactId = String(req.body?.contactId || '').trim();
+  const emailInput = normaliseEmail(req.body?.email || '');
+  if (!contactId && !emailInput) {
+    return res.status(400).json({ ok: false, message: 'contactId or email required' });
+  }
+  if (emailInput && !isValidEmail(emailInput)) {
+    return res.status(400).json({ ok: false, message: 'Valid email required' });
+  }
+
+  const contact = await prisma.marketingContact.findFirst({
+    where: contactId
+      ? { id: contactId, tenantId }
+      : {
+          tenantId,
+          email: { equals: emailInput, mode: 'insensitive' },
+        },
+    include: { consents: { orderBy: { createdAt: 'desc' } } },
+  });
+  if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
+
+  const tenant = await prisma.user.findUnique({
+    where: { id: tenantId },
+    select: { tradingName: true, companyName: true, name: true, storefrontSlug: true, id: true },
+  });
+  if (!tenant) return res.status(404).json({ ok: false, message: 'Tenant not found' });
+
+  const email = contact.email;
+  const token = createUnsubscribeToken({ tenantId, email });
+  const unsubscribeUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(
+    tenant.storefrontSlug || tenant.id
+  )}/${encodeURIComponent(token)}`;
+  const preferencesToken = createPreferencesToken({ tenantId, email });
+  const preferencesUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/preferences/${encodeURIComponent(
+    tenant.storefrontSlug || tenant.id
+  )}/${encodeURIComponent(preferencesToken)}`;
+
+  const configOptions = resolveIntelligentConfig(config.configJson);
+  const upcomingShows = await getTenantUpcomingShows(tenantId, configOptions.horizonDays);
+  let recommendedShows = await rankShowsForContact({ tenantId, email }, upcomingShows, { limit: configOptions.limit });
+
+  if (recommendedShows.length) {
+    const purchaseChecks = await Promise.all(
+      recommendedShows.map(async (show) => ({
+        show,
+        purchased: await hasPurchasedShow(tenantId, email, show.showId),
+      }))
+    );
+    recommendedShows = purchaseChecks.filter((entry) => !entry.purchased).map((entry) => entry.show);
+  }
+
+  const recommendedShowsPayload = recommendedShows.map((show) => ({
+    title: show.title,
+    date: show.date,
+    venueName: show.venueName,
+    town: show.town,
+    county: show.county,
+    bookingUrl: show.bookingUrl,
+    imageUrl: show.imageUrl,
+    reason: show.reason,
+  }));
+  const recommendedShowsHtml = buildIntelligentShowsHtml(recommendedShowsPayload);
+
+  const suppression = await prisma.marketingSuppression.findFirst({
+    where: {
+      tenantId,
+      email: { equals: email, mode: 'insensitive' },
+    },
+    select: { type: true },
+  });
+  const consentStatus = (contact.consents[0]?.status as MarketingConsentStatus) || MarketingConsentStatus.TRANSACTIONAL_ONLY;
+  const suppressionDecision = shouldSuppressContact(consentStatus, suppression);
+
+  const reasons = new Set<string>();
+  if (suppressionDecision.suppressed && suppressionDecision.reason) {
+    reasons.add(suppressionDecision.reason);
+  }
+
+  const sendCap = await countIntelligentSendsLast30d(tenantId, email);
+  sendCap.reasons.forEach((reason) => reasons.add(reason));
+
+  const topShowId = recommendedShows[0]?.showId;
+  if (topShowId) {
+    const recentEligibility = await hasEmailedShowRecently(tenantId, email, topShowId, configOptions.cooldownDays);
+    recentEligibility.reasons.forEach((reason) => reasons.add(reason));
+  }
+
+  const mergeContext = {
+    ...buildTemplateMergeContext({
+      contact: {
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        email,
+        town: contact.town,
+      },
+      links: {
+        managePreferencesLink: preferencesUrl,
+        unsubscribeLink: unsubscribeUrl,
+      },
+    }),
+    recommendedShows: recommendedShowsPayload,
+    recommendedShowsHtml,
+    meta: {
+      kind,
+      reasons: Array.from(reasons),
+    },
+  };
+
+  let html = '';
+  let text: string | null = null;
+  if (config.template.compiledHtml) {
+    html = renderCompiledTemplate({
+      compiledHtml: config.template.compiledHtml,
+      mergeContext,
+      unsubscribeUrl,
+      preferencesUrl,
+      recommendedShows: recommendedShowsHtml,
+    });
+    if (config.template.compiledText) {
+      text = renderMergeTags(config.template.compiledText, mergeContext);
+    }
+  } else {
+    const rendered = renderMarketingTemplate(config.template.mjmlBody, {
+      firstName: contact.firstName || '',
+      lastName: contact.lastName || '',
+      email,
+      tenantName: tenantNameFrom(tenant),
+      unsubscribeUrl,
+      preferencesUrl,
+      recommendedShows: recommendedShowsHtml,
+    });
+    html = rendered.html;
+  }
+
+  res.json({
+    ok: true,
+    html,
+    ...(text ? { text } : {}),
+    meta: {
+      kind,
+      reasons: Array.from(reasons),
+    },
+  });
 });
 
 router.post('/api/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
