@@ -1067,100 +1067,26 @@ async function renderTemplateEditor(templateId) {
 setupVisualBuilder();
 setupColorPickerListeners(); // NEW: Initialize picker listeners
 
-// --- NEW: Modern Color Picker Logic ---
-const COLOR_PALETTE = [
-    ['#000000', '#333333', '#555555', '#777777', '#999999', '#bbbbbb', '#ffffff'],
-    ['#ef4444', '#f87171', '#fca5a5', '#fecaca', '#fee2e2', '#fff1f2', '#fff5f5'], // Reds
-    ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#fff7ed', '#fffaf0'], // Oranges
-    ['#f59e0b', '#fbbf24', '#fcd34d', '#fde68a', '#fef3c7', '#fffbeb', '#fffdf0'], // Ambers
-    ['#84cc16', '#a3e635', '#bef264', '#d9f99d', '#ecfccb', '#f7fee7', '#fafff0'], // Limes
-    ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5', '#ecfdf5', '#f0fdf4'], // Emeralds
-    ['#06b6d4', '#22d3ee', '#67e8f9', '#a5f3fc', '#cffafe', '#ecfeff', '#f0faff'], // Cyans
-    ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#eff6ff', '#f0f7ff'], // Blues
-    ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#eef2ff', '#f5f7ff'], // Indigos
-    ['#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe', '#f5f3ff', '#fafaff'], // Violets
-    ['#d946ef', '#e879f9', '#f0abfc', '#f5d0fe', '#fae8ff', '#fdf4ff', '#fffaff'], // Fuchsias
-];
 
-function renderModernColorPicker(label, id, value, updateFunctionGlobalName) {
-    const safeValue = value || '#ffffff';
-    // Generate Palette HTML
-    const paletteHtml = COLOR_PALETTE.map(row => 
-        row.map(color => 
-            `<div class="ms-color-swatch" style="background:${color}" onclick="window.pickColor('${id}', '${color}', '${updateFunctionGlobalName}')"></div>`
-        ).join('')
-    ).join('');
 
-    return `
-    <div class="ms-field ms-color-picker-wrapper" id="cp-${id}">
-        <label>${label}</label>
-        <div class="ms-color-input-group">
-            <div class="ms-color-preview" id="preview-${id}" style="background-color: ${safeValue};" onclick="window.toggleColorPopover('${id}')"></div>
-            <input type="text" class="ms-hex-input" id="input-${id}" value="${safeValue}" onchange="window.manualHexUpdate('${id}', this.value, '${updateFunctionGlobalName}')" maxlength="7">
-        </div>
-        <div class="ms-color-popover" id="popover-${id}">
-            <div class="ms-palette-grid">
-                ${paletteHtml}
-            </div>
-        </div>
-    </div>`;
-}
+window.updateBlockProp = function(prop, value) {
+    if (window.activeBlockId) {
+        const block = window.editorBlocks.find(b => b.id === window.activeBlockId);
+        if (block && block.content) {
+            block.content[prop] = value;
+            
+            // Sync inputs if they exist (e.g. linking slider to number input)
+            const input = document.getElementById(`input-${prop}`);
+            const slider = document.getElementById(`slider-${prop}`);
+            if (input && input.value !== value) input.value = value;
+            if (slider && slider.value !== value) slider.value = value;
 
-// Global handlers for the color picker
-window.toggleColorPopover = function(id) {
-    // Close all others first
-    document.querySelectorAll('.ms-color-popover').forEach(el => {
-        if (el.id !== `popover-${id}`) el.classList.remove('open');
-    });
-    const popover = document.getElementById(`popover-${id}`);
-    if (popover) popover.classList.toggle('open');
-};
-
-window.pickColor = function(id, color, updateFnName) {
-    const input = document.getElementById(`input-${id}`);
-    const preview = document.getElementById(`preview-${id}`);
-    const popover = document.getElementById(`popover-${id}`);
-    
-    if (input) input.value = color;
-    if (preview) preview.style.backgroundColor = color;
-    if (popover) popover.classList.remove('open');
-
-    // Call the specific update function (e.g., 'updateCanvasBg' or 'updateBlockBg')
-    if (typeof window[updateFnName] === 'function') {
-        window[updateFnName](color);
-    }
-};
-
-window.manualHexUpdate = function(id, color, updateFnName) {
-    if (!color.startsWith('#')) color = '#' + color;
-    const preview = document.getElementById(`preview-${id}`);
-    if (preview) preview.style.backgroundColor = color;
-    
-    if (typeof window[updateFnName] === 'function') {
-        window[updateFnName](color);
-    }
-};
-
-function setupColorPickerListeners() {
-    // Close popovers when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.ms-color-picker-wrapper')) {
-            document.querySelectorAll('.ms-color-popover').forEach(el => el.classList.remove('open'));
+            renderBuilderCanvas();
         }
-    });
-}
-
-// Specific Updaters for the Builder
-window.updateCanvasBg = function(color) {
-    const canvas = document.getElementById('ms-builder-canvas');
-    if (canvas) {
-        canvas.style.setProperty('--canvas-bg', color);
-        window.currentTemplateStyles = window.currentTemplateStyles || {};
-        window.currentTemplateStyles.canvasBg = color;
     }
 };
-
-window.updateActiveBlockBg = function(color) {
+    
+    window.updateActiveBlockBg = function(color) {
     if (window.activeBlockId) {
         const block = window.editorBlocks.find(b => b.id === window.activeBlockId);
         if (block && block.content) {
@@ -2439,8 +2365,14 @@ function getDefaultBlockContent(type) {
     const placeholderSmall = getPlaceholderImage(300, 200);
     
     switch (type) {
-        case 'strip': return { bgColor: '#ffffff', blocks: [], fullWidth: false, padding: '20px' };
-        case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
+case 'strip': return { 
+    bgColor: '#ffffff', 
+    blocks: [], 
+    fullWidth: false,   // Kept your existing setting
+    padding: '20px',    // Kept your existing setting
+    borderRadius: '0'   // Added new setting
+};
+      case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
         case 'image': return { src: placeholderLarge, alt: 'Image', link: '' };
         case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
@@ -2484,32 +2416,57 @@ function createBlockElement(block, index, parentArray) {
 
     const el = document.createElement('div');
     el.className = 'ms-builder-block';
-    if (block.type === 'strip') {
-        el.classList.add('is-strip');
-    }
-    el.dataset.id = block.id;
-    el.draggable = true;
-    if (block.type === 'strip') {
-        const fullWidth = Boolean(block.content?.fullWidth);
-        el.style.padding = fullWidth ? '0px' : block.styles?.padding || '10px';
-        el.style.margin = fullWidth ? '0px' : block.styles?.margin || '0px';
-    } else {
-        el.style.padding = block.styles?.padding || '10px';
-    }
+  // --- STRIP EDITOR (Corrected & Merged) ---
+if (block.type === 'strip') {
+    container.innerHTML = `
+        <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
+            <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Strip Settings</div>
+            
+            ${renderModernColorPicker('Background Color', 'strip-bg', block.content.bgColor || '#ffffff', 'updateActiveBlockBg')}
+            
+            <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:12px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                <input type="checkbox" id="input-fullWidth" ${block.content.fullWidth ? 'checked' : ''} onchange="window.updateBlockProp('fullWidth', this.checked)" style="width:auto; margin:0;">
+                <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full Width Background</label>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:16px;">
+                <div class="ms-field">
+                    <label>Padding (px)</label>
+                    <input type="number" id="input-padding" value="${parseInt(block.content.padding) || 20}" oninput="window.updateBlockProp('padding', this.value)">
+                </div>
+                <div class="ms-field">
+                    <label>Corner Radius</label>
+                    <input type="number" id="input-borderRadius" value="${parseInt(block.content.borderRadius) || 0}" oninput="window.updateBlockProp('borderRadius', this.value)">
+                </div>
+            </div>
+
+            <div class="ms-field" style="margin-top:8px;">
+                 <input type="range" id="slider-borderRadius" min="0" max="60" value="${parseInt(block.content.borderRadius) || 0}" style="width:100%; cursor: pointer;" oninput="window.updateBlockProp('borderRadius', this.value)">
+            </div>
+            
+            <div class="ms-muted" style="margin-top:12px; font-size:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
+                Adjust corner radius to create card-like designs or floating sections.
+            </div>
+        </div>
+    `;
+}
     
-    // --- STRIP SPECIAL HANDLING ---
-    if (block.type === 'strip') {
-        el.innerHTML = `
-            <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${block.content.padding || '20px'};">
-                <div class="ms-strip-inner"></div>
-            </div>
-            <div class="block-actions">
-                <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
-                <span title="Duplicate" onclick="window.duplicateBlockById('${block.id}')">${iconDuplicate}</span>
-                <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
-            </div>
-        `;
-        const innerContainer = el.querySelector('.ms-strip-inner');
+ // --- STRIP SPECIAL HANDLING ---
+if (block.type === 'strip') {
+    // Get styles with defaults
+    const pad = block.content.padding !== undefined ? block.content.padding : '20px';
+    const radius = block.content.borderRadius !== undefined ? block.content.borderRadius : '0';
+    
+    el.innerHTML = `
+    <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
+        <div class="ms-strip-inner"></div>
+    </div>
+    <div class="block-actions">
+        <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
+    </div>
+    `;
+  
+  const innerContainer = el.querySelector('.ms-strip-inner');
         // Recursively render children into this strip
         if (block.content.blocks) {
             block.content.blocks.forEach((child, childIdx) => {
@@ -2726,3 +2683,96 @@ function openFooterEditor() {
         renderBuilderCanvas();
     });
 }
+
+// --- NEW: Modern Color Picker Logic ---
+const COLOR_PALETTE = [
+    ['#000000', '#333333', '#555555', '#777777', '#999999', '#bbbbbb', '#ffffff'],
+    ['#ef4444', '#f87171', '#fca5a5', '#fecaca', '#fee2e2', '#fff1f2', '#fff5f5'], // Reds
+    ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#fff7ed', '#fffaf0'], // Oranges
+    ['#f59e0b', '#fbbf24', '#fcd34d', '#fde68a', '#fef3c7', '#fffbeb', '#fffdf0'], // Ambers
+    ['#84cc16', '#a3e635', '#bef264', '#d9f99d', '#ecfccb', '#f7fee7', '#fafff0'], // Limes
+    ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5', '#ecfdf5', '#f0fdf4'], // Emeralds
+    ['#06b6d4', '#22d3ee', '#67e8f9', '#a5f3fc', '#cffafe', '#ecfeff', '#f0faff'], // Cyans
+    ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#eff6ff', '#f0f7ff'], // Blues
+    ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#eef2ff', '#f5f7ff'], // Indigos
+    ['#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe', '#f5f3ff', '#fafaff'], // Violets
+    ['#d946ef', '#e879f9', '#f0abfc', '#f5d0fe', '#fae8ff', '#fdf4ff', '#fffaff'], // Fuchsias
+];
+
+function renderModernColorPicker(label, id, value, updateFunctionGlobalName) {
+    const safeValue = value || '#ffffff';
+    // Generate Palette HTML
+    const paletteHtml = COLOR_PALETTE.map(row => 
+        row.map(color => 
+            `<div class="ms-color-swatch" style="background:${color}" onclick="window.pickColor('${id}', '${color}', '${updateFunctionGlobalName}')"></div>`
+        ).join('')
+    ).join('');
+
+    return `
+    <div class="ms-field ms-color-picker-wrapper" id="cp-${id}">
+        <label>${label}</label>
+        <div class="ms-color-input-group">
+            <div class="ms-color-preview" id="preview-${id}" style="background-color: ${safeValue};" onclick="window.toggleColorPopover('${id}')"></div>
+            <input type="text" class="ms-hex-input" id="input-${id}" value="${safeValue}" onchange="window.manualHexUpdate('${id}', this.value, '${updateFunctionGlobalName}')" maxlength="7">
+        </div>
+        <div class="ms-color-popover" id="popover-${id}">
+            <div class="ms-palette-grid">
+                ${paletteHtml}
+            </div>
+        </div>
+    </div>`;
+}
+
+// Global handlers for the color picker
+window.toggleColorPopover = function(id) {
+    // Close all others first
+    document.querySelectorAll('.ms-color-popover').forEach(el => {
+        if (el.id !== `popover-${id}`) el.classList.remove('open');
+    });
+    const popover = document.getElementById(`popover-${id}`);
+    if (popover) popover.classList.toggle('open');
+};
+
+window.pickColor = function(id, color, updateFnName) {
+    const input = document.getElementById(`input-${id}`);
+    const preview = document.getElementById(`preview-${id}`);
+    const popover = document.getElementById(`popover-${id}`);
+    
+    if (input) input.value = color;
+    if (preview) preview.style.backgroundColor = color;
+    if (popover) popover.classList.remove('open');
+
+    // Call the specific update function (e.g., 'updateCanvasBg' or 'updateBlockBg')
+    if (typeof window[updateFnName] === 'function') {
+        window[updateFnName](color);
+    }
+};
+
+window.manualHexUpdate = function(id, color, updateFnName) {
+    if (!color.startsWith('#')) color = '#' + color;
+    const preview = document.getElementById(`preview-${id}`);
+    if (preview) preview.style.backgroundColor = color;
+    
+    if (typeof window[updateFnName] === 'function') {
+        window[updateFnName](color);
+    }
+};
+
+function setupColorPickerListeners() {
+    // Close popovers when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.ms-color-picker-wrapper')) {
+            document.querySelectorAll('.ms-color-popover').forEach(el => el.classList.remove('open'));
+        }
+    });
+}
+
+// Specific Updaters for the Builder
+window.updateCanvasBg = function(color) {
+    const canvas = document.getElementById('ms-builder-canvas');
+    if (canvas) {
+        canvas.style.setProperty('--canvas-bg', color);
+        window.currentTemplateStyles = window.currentTemplateStyles || {};
+        window.currentTemplateStyles.canvasBg = color;
+    }
+};
