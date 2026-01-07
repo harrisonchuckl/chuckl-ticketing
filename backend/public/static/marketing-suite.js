@@ -875,6 +875,15 @@ async function renderTemplateEditor(templateId) {
     const versions = versionsData.versions || [];
     appState.shows = showsData.items || [];
 
+  window.currentTemplateMeta = {
+    name: template.name || '',
+    subject: template.subject || '',
+    previewText: template.previewText || '',
+    fromName: template.fromName || '',
+    fromEmail: template.fromEmail || '',
+    replyTo: template.replyTo || '',
+  };
+
   main.innerHTML = `
     <div class="ms-card">
       <div class="ms-toolbar" style="justify-content:space-between;">
@@ -886,14 +895,6 @@ async function renderTemplateEditor(templateId) {
           <button class="ms-secondary" id="ms-template-preview">Preview</button>
           <button class="ms-primary" id="ms-template-save">Save changes</button>
         </div>
-      </div>
-      <div class="ms-grid cols-2" style="margin-top:16px;">
-        ${renderFormRow('Name', `<input id="ms-template-name" value="${escapeHtml(template.name)}" />`)}
-        ${renderFormRow('Subject', `<input id="ms-template-subject" value="${escapeHtml(template.subject)}" />`)}
-        ${renderFormRow('Preview text', `<input id="ms-template-preview-text" value="${escapeHtml(template.previewText || '')}" />`)}
-        ${renderFormRow('From name', `<input id="ms-template-from-name" value="${escapeHtml(template.fromName || '')}" />`)}
-        ${renderFormRow('From email', `<input id="ms-template-from-email" value="${escapeHtml(template.fromEmail || '')}" />`)}
-        ${renderFormRow('Reply-to', `<input id="ms-template-reply-to" value="${escapeHtml(template.replyTo || '')}" />`)}
       </div>
       <div id="ms-template-tabs" style="margin-top:16px;">
         ${renderTabs([
@@ -1098,13 +1099,19 @@ window.updateBlockProp = function(prop, value) {
     
     
   async function saveTemplate() {
+    const meta = window.currentTemplateMeta || {};
+    const getMetaField = (id, fallback) => {
+      const el = document.getElementById(id);
+      if (el) return el.value;
+      return fallback || '';
+    };
     const payload = {
-      name: document.getElementById('ms-template-name').value,
-      subject: document.getElementById('ms-template-subject').value,
-      previewText: document.getElementById('ms-template-preview-text').value,
-      fromName: document.getElementById('ms-template-from-name').value,
-      fromEmail: document.getElementById('ms-template-from-email').value,
-      replyTo: document.getElementById('ms-template-reply-to').value,
+      name: getMetaField('ms-template-name', meta.name),
+      subject: getMetaField('ms-template-subject', meta.subject),
+      previewText: getMetaField('ms-template-preview-text', meta.previewText),
+      fromName: getMetaField('ms-template-from-name', meta.fromName),
+      fromEmail: getMetaField('ms-template-from-email', meta.fromEmail),
+      replyTo: getMetaField('ms-template-reply-to', meta.replyTo),
 // We are saving the JSON state of the visual builder
 mjmlBody: JSON.stringify(window.currentTemplateBlocks || []),    };
     const response = await fetchJson(`${API_BASE}/templates/${templateId}`, {
@@ -2436,11 +2443,13 @@ function createBlockElement(block, index, parentArray) {
         const marginValue = Number.parseInt(block.content.margin, 10);
         const pad = Number.isFinite(padValue) ? padValue : 20;
         const radius = Number.isFinite(radiusValue) ? radiusValue : 0;
-        const margin = Number.isFinite(marginValue) ? marginValue : 0;
+        const margin = Number.isFinite(marginValue) ? Math.max(marginValue, 0) : 0;
         
         el.innerHTML = `
-        <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px; margin: 0 ${margin}px; width: calc(100% - ${margin * 2}px);">
-            <div class="ms-strip-inner"></div>
+        <div class="ms-strip-wrapper" style="padding: 0 ${margin}px;">
+            <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
+                <div class="ms-strip-inner"></div>
+            </div>
         </div>
         <div class="block-actions">
             <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
@@ -2599,7 +2608,7 @@ function openBlockEditor(block) {
                         <input type="number" id="input-padding" value="${parseInt(block.content.padding) || 20}" oninput="window.updateBlockProp('padding', this.value)">
                     </div>
                     <div class="ms-field">
-                        <label>Margin (px)</label>
+                        <label>Side gap (px)</label>
                         <input type="number" id="input-margin" value="${parseInt(block.content.margin) || 0}" oninput="window.updateBlockProp('margin', this.value)">
                     </div>
                     <div class="ms-field">
