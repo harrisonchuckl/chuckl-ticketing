@@ -1284,7 +1284,7 @@ router.post('/api/marketing/intelligent/:kind/preview', requireAdminOrOrganiser,
           tenantId,
           email: { equals: emailInput, mode: 'insensitive' },
         },
-    include: { consents: { orderBy: { createdAt: 'desc' } } },
+    include: { consents: { orderBy: { capturedAt: 'desc' } } },
   });
   if (!contact) return res.status(404).json({ ok: false, message: 'Contact not found' });
 

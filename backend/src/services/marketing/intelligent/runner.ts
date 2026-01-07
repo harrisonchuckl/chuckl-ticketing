@@ -138,7 +138,7 @@ export async function runIntelligentCampaign(options: {
 
   const contacts = await prisma.marketingContact.findMany({
     where: { tenantId },
-    include: { consents: { orderBy: { createdAt: 'desc' } } },
+    include: { consents: { orderBy: { capturedAt: 'desc' } } },
   });
   const suppressions = await prisma.marketingSuppression.findMany({
     where: { tenantId },

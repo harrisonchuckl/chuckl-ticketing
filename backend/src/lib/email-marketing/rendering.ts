@@ -13,6 +13,7 @@ export type MarketingTemplateVariables = {
   showTown?: string | null;
   showCounty?: string | null;
   showUrl?: string | null;
+  ticketsRemaining?: string | number | null;
 };
 
 export function interpolateTemplate(template: string, variables: MarketingTemplateVariables): string {

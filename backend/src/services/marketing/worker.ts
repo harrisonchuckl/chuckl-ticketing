@@ -19,6 +19,7 @@ import {
   OrderStatus,
   ShowStatus,
   ProductOrderStatus,
+  Prisma,
 } from '@prisma/client';
 import prisma from '../../lib/prisma.js';
 import { isWithinIntelligentSendWindow, runIntelligentCampaign } from './intelligent/runner.js';
@@ -162,7 +163,7 @@ async function processAlmostSoldOutIntelligentCampaigns() {
 
     const contacts = await prisma.marketingContact.findMany({
       where: { tenantId: config.tenantId },
-      include: { consents: { orderBy: { createdAt: 'desc' } } },
+      include: { consents: { orderBy: { capturedAt: 'desc' } } },
     });
     const suppressions = await prisma.marketingSuppression.findMany({
       where: { tenantId: config.tenantId },
@@ -521,7 +522,9 @@ async function processAddonUpsellIntelligentCampaigns() {
       const emails = Array.from(entry.emails.values());
       if (!emails.length || !recommendedAddonsHtml) continue;
 
-      const emailFilters = emails.map((email) => ({ customerEmail: { equals: email, mode: 'insensitive' } }));
+      const emailFilters: Prisma.ProductOrderWhereInput[] = emails.map((email) => ({
+        customerEmail: { equals: email, mode: Prisma.QueryMode.insensitive },
+      }));
       const productOrders = emailFilters.length
         ? await prisma.productOrder.findMany({
             where: {
@@ -551,13 +554,18 @@ async function processAddonUpsellIntelligentCampaigns() {
       if (!eligibleEmails.length) continue;
       const eligibleEmailSet = new Set(eligibleEmails.map((email) => normaliseEmail(email)));
 
-      const contactFilters = eligibleEmails.map((email) => ({ email: { equals: email, mode: 'insensitive' } }));
+      const contactFilters: Prisma.MarketingContactWhereInput[] = eligibleEmails.map((email) => ({
+        email: { equals: email, mode: Prisma.QueryMode.insensitive },
+      }));
+      const suppressionFilters: Prisma.MarketingSuppressionWhereInput[] = eligibleEmails.map((email) => ({
+        email: { equals: email, mode: Prisma.QueryMode.insensitive },
+      }));
       const contacts = await prisma.marketingContact.findMany({
         where: {
           tenantId: config.tenantId,
           OR: contactFilters,
         },
-        include: { consents: { orderBy: { createdAt: 'desc' } } },
+        include: { consents: { orderBy: { capturedAt: 'desc' } } },
       });
 
       if (!contacts.length) continue;
@@ -565,7 +573,7 @@ async function processAddonUpsellIntelligentCampaigns() {
       const suppressions = await prisma.marketingSuppression.findMany({
         where: {
           tenantId: config.tenantId,
-          OR: contactFilters,
+          OR: suppressionFilters,
         },
         select: { email: true, type: true },
       });
@@ -644,7 +652,7 @@ async function processAddonUpsellIntelligentCampaigns() {
         const unsubscribeUrl = buildUnsubscribeUrl(tenant, email);
         const preferencesUrl = buildPreferencesUrl(tenant, email);
 
-        const mergeContext = buildDefaultMergeContext({
+        const baseMergeContext = buildDefaultMergeContext({
           contact: {
             firstName: contact.firstName || '',
             lastName: contact.lastName || '',
@@ -662,14 +670,17 @@ async function processAddonUpsellIntelligentCampaigns() {
             managePreferencesLink: preferencesUrl,
             unsubscribeLink: unsubscribeUrl,
           },
-        }) as Record<string, any>;
+        });
 
-        mergeContext.showId = showId;
-        mergeContext.recommendedAddonsHtml = recommendedAddonsHtml;
-        mergeContext.recommendedAddons = recommendedAddonsPayload;
-        mergeContext.show = {
-          ...(mergeContext.show || {}),
+        const mergeContext = {
+          ...baseMergeContext,
           showId,
+          recommendedAddonsHtml,
+          recommendedAddons: recommendedAddonsPayload,
+          show: {
+            ...baseMergeContext.show,
+            showId,
+          },
         };
 
         let renderedHtml = '';
