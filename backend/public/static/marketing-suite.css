@@ -258,6 +258,8 @@ body {
 .ms-sidebar-panel { display: none; padding: 16px; overflow-y: auto; flex: 1; }
 .ms-sidebar-panel.active { display: block; }
 .ms-sidebar-panel#ms-block-editor { overflow: visible; padding-bottom: 0; }
+.ms-block-editor-header { display: flex; align-items: center; gap: 12px; }
+.ms-block-editor-title { font-weight: 600; font-size: 14px; color: var(--ms-text); }
 
 .ms-block-grid {
   display: grid;
@@ -288,6 +290,67 @@ body {
 
 /* Ensure hidden panels are definitely hidden */
 .ms-sidebar-panel.hidden { display: none !important; }
+
+.ms-rte-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--ms-border);
+  border-radius: 10px;
+  background: #f8fafc;
+  margin-bottom: 10px;
+}
+
+.ms-rte-btn {
+  background: #fff;
+  border: 1px solid var(--ms-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.ms-rte-btn:hover {
+  border-color: var(--ms-primary);
+  color: var(--ms-primary);
+}
+
+.ms-rte-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--ms-border);
+  margin: 0 4px;
+}
+
+.ms-rte-select {
+  border: 1px solid var(--ms-border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.ms-rte-editor {
+  min-height: 160px;
+  border: 1px solid var(--ms-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.ms-rte-editor:focus {
+  outline: 2px solid rgba(79, 70, 229, 0.2);
+  border-color: var(--ms-primary);
+}
+
+.ms-rte-color-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
 
 /* MODERN COLOR PICKER STYLES */
 .ms-color-picker-wrapper { position: relative; overflow: visible; }
