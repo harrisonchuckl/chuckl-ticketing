@@ -1045,7 +1045,7 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
   const templateId = hasOwn(payload, 'templateId') ? String(payload.templateId || '').trim() : undefined;
   const enabled = hasOwn(payload, 'enabled') ? Boolean(payload.enabled) : undefined;
   const configJson = hasOwn(payload, 'configJson') ? payload.configJson : undefined;
-  const configJsonInput =
+  const configJsonInput: Prisma.InputJsonValue | Prisma.NullTypes.JsonNull | undefined =
     configJson === undefined ? undefined : configJson === null ? Prisma.JsonNull : (configJson as Prisma.InputJsonValue);
   const lastRunAtRaw = hasOwn(payload, 'lastRunAt') ? payload.lastRunAt : undefined;
   const lastRunAt =
@@ -1085,20 +1085,20 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
         tenantId,
         kind,
         templateId: templateId as string,
-        configJson: configJsonInput as Prisma.InputJsonValue | Prisma.JsonNull,
+        configJson: configJsonInput as Prisma.InputJsonValue | Prisma.NullTypes.JsonNull,
         enabled: enabled ?? true,
         lastRunAt: lastRunAt ?? null,
       },
-      select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+      select: { id: true, kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
     });
   } else if (Object.keys(updateData).length) {
     record = await prisma.marketingIntelligentCampaign.update({
       where: { id: existing.id },
       data: updateData,
-      select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+      select: { id: true, kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
     });
   } else {
-    record = { kind, ...existing };
+    record = existing;
   }
 
   const response = {
