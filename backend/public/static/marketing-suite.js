@@ -2595,10 +2595,6 @@ function openBlockEditor(block) {
                         <input type="number" id="input-borderRadius" value="${parseInt(block.content.borderRadius) || 0}" oninput="window.updateBlockProp('borderRadius', this.value)">
                     </div>
                 </div>
-
-                <div class="ms-field" style="margin-top:8px;">
-                     <input type="range" id="slider-borderRadius" min="0" max="60" value="${parseInt(block.content.borderRadius) || 0}" style="width:100%; cursor: pointer;" oninput="window.updateBlockProp('borderRadius', this.value)">
-                </div>
                 
                 <div class="ms-muted" style="margin-top:12px; font-size:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
                     Adjust corner radius to create card-like designs or floating sections.
