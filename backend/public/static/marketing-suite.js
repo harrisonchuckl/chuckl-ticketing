@@ -970,13 +970,12 @@ async function renderTemplateEditor(templateId) {
           </div>
         </div>
       </div>
-      <div id="ms-sidebar-styles" class="ms-sidebar-panel">
-        <div class="ms-field">
-            <label>Page Background</label>
-            <input type="color" id="ms-style-bg" value="#ffffff">
-        </div>
-        <div class="ms-field">
-            <label>Font Family</label>
+    <div id="ms-sidebar-styles" class="ms-sidebar-panel">
+    ${renderModernColorPicker('Page Background', 'global-bg', '#ffffff', 'updateCanvasBg')}
+    
+    <div class="ms-field" style="margin-top:12px;">
+        <label>Font Family</label>
+        
             <select id="ms-style-font">
                 <option value="Arial">Arial</option>
                 <option value="Helvetica">Helvetica</option>
@@ -1066,6 +1065,111 @@ async function renderTemplateEditor(templateId) {
 
 // Initialize the Visual Builder logic
 setupVisualBuilder();
+setupColorPickerListeners(); // NEW: Initialize picker listeners
+
+// --- NEW: Modern Color Picker Logic ---
+const COLOR_PALETTE = [
+    ['#000000', '#333333', '#555555', '#777777', '#999999', '#bbbbbb', '#ffffff'],
+    ['#ef4444', '#f87171', '#fca5a5', '#fecaca', '#fee2e2', '#fff1f2', '#fff5f5'], // Reds
+    ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#fff7ed', '#fffaf0'], // Oranges
+    ['#f59e0b', '#fbbf24', '#fcd34d', '#fde68a', '#fef3c7', '#fffbeb', '#fffdf0'], // Ambers
+    ['#84cc16', '#a3e635', '#bef264', '#d9f99d', '#ecfccb', '#f7fee7', '#fafff0'], // Limes
+    ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5', '#ecfdf5', '#f0fdf4'], // Emeralds
+    ['#06b6d4', '#22d3ee', '#67e8f9', '#a5f3fc', '#cffafe', '#ecfeff', '#f0faff'], // Cyans
+    ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#eff6ff', '#f0f7ff'], // Blues
+    ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#eef2ff', '#f5f7ff'], // Indigos
+    ['#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe', '#f5f3ff', '#fafaff'], // Violets
+    ['#d946ef', '#e879f9', '#f0abfc', '#f5d0fe', '#fae8ff', '#fdf4ff', '#fffaff'], // Fuchsias
+];
+
+function renderModernColorPicker(label, id, value, updateFunctionGlobalName) {
+    const safeValue = value || '#ffffff';
+    // Generate Palette HTML
+    const paletteHtml = COLOR_PALETTE.map(row => 
+        row.map(color => 
+            `<div class="ms-color-swatch" style="background:${color}" onclick="window.pickColor('${id}', '${color}', '${updateFunctionGlobalName}')"></div>`
+        ).join('')
+    ).join('');
+
+    return `
+    <div class="ms-field ms-color-picker-wrapper" id="cp-${id}">
+        <label>${label}</label>
+        <div class="ms-color-input-group">
+            <div class="ms-color-preview" id="preview-${id}" style="background-color: ${safeValue};" onclick="window.toggleColorPopover('${id}')"></div>
+            <input type="text" class="ms-hex-input" id="input-${id}" value="${safeValue}" onchange="window.manualHexUpdate('${id}', this.value, '${updateFunctionGlobalName}')" maxlength="7">
+        </div>
+        <div class="ms-color-popover" id="popover-${id}">
+            <div class="ms-palette-grid">
+                ${paletteHtml}
+            </div>
+        </div>
+    </div>`;
+}
+
+// Global handlers for the color picker
+window.toggleColorPopover = function(id) {
+    // Close all others first
+    document.querySelectorAll('.ms-color-popover').forEach(el => {
+        if (el.id !== `popover-${id}`) el.classList.remove('open');
+    });
+    const popover = document.getElementById(`popover-${id}`);
+    if (popover) popover.classList.toggle('open');
+};
+
+window.pickColor = function(id, color, updateFnName) {
+    const input = document.getElementById(`input-${id}`);
+    const preview = document.getElementById(`preview-${id}`);
+    const popover = document.getElementById(`popover-${id}`);
+    
+    if (input) input.value = color;
+    if (preview) preview.style.backgroundColor = color;
+    if (popover) popover.classList.remove('open');
+
+    // Call the specific update function (e.g., 'updateCanvasBg' or 'updateBlockBg')
+    if (typeof window[updateFnName] === 'function') {
+        window[updateFnName](color);
+    }
+};
+
+window.manualHexUpdate = function(id, color, updateFnName) {
+    if (!color.startsWith('#')) color = '#' + color;
+    const preview = document.getElementById(`preview-${id}`);
+    if (preview) preview.style.backgroundColor = color;
+    
+    if (typeof window[updateFnName] === 'function') {
+        window[updateFnName](color);
+    }
+};
+
+function setupColorPickerListeners() {
+    // Close popovers when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.ms-color-picker-wrapper')) {
+            document.querySelectorAll('.ms-color-popover').forEach(el => el.classList.remove('open'));
+        }
+    });
+}
+
+// Specific Updaters for the Builder
+window.updateCanvasBg = function(color) {
+    const canvas = document.getElementById('ms-builder-canvas');
+    if (canvas) {
+        canvas.style.setProperty('--canvas-bg', color);
+        window.currentTemplateStyles = window.currentTemplateStyles || {};
+        window.currentTemplateStyles.canvasBg = color;
+    }
+};
+
+window.updateActiveBlockBg = function(color) {
+    if (window.activeBlockId) {
+        const block = window.editorBlocks.find(b => b.id === window.activeBlockId);
+        if (block && block.content) {
+            block.content.bgColor = color;
+            renderBuilderCanvas(); // Re-render to show change
+        }
+    }
+};
+    
     
   async function saveTemplate() {
     const payload = {
@@ -2229,11 +2333,25 @@ canvas.addEventListener('drop', (e) => {
     // 7. Back Button
     const backBtn = document.getElementById('ms-back-to-blocks');
     if (backBtn) {
-        backBtn.addEventListener('click', () => {
-            document.getElementById('ms-block-editor').classList.add('hidden');
-            document.getElementById('ms-sidebar-blocks').classList.add('active');
-            document.querySelector('[data-sidebar-tab="blocks"]').classList.add('active');
-        });
+       backBtn.addEventListener('click', () => {
+    // Hide Editor
+    const editor = document.getElementById('ms-block-editor');
+    editor.classList.add('hidden');
+    editor.classList.remove('active');
+    editor.style.display = 'none'; // Force hide
+
+    // Show Blocks
+    const blocks = document.getElementById('ms-sidebar-blocks');
+    blocks.classList.add('active');
+    blocks.style.display = 'block'; // Force show
+
+    // Reset Tabs
+    document.querySelectorAll('.ms-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-sidebar-tab="blocks"]').classList.add('active');
+    
+    // Clear selection on canvas
+    document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
+});
     }
 }
 
@@ -2507,79 +2625,52 @@ window.deleteBlock = function(id) {
 }
 
 function openBlockEditor(block) {
-    document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
+    // 1. Ensure all other panels are hidden specifically
+    document.querySelectorAll('.ms-sidebar-panel').forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none'; // Force hide
+    });
+
+    // 2. Show Editor Panel
     const editorPanel = document.getElementById('ms-block-editor');
     editorPanel.classList.remove('hidden');
     editorPanel.classList.add('active');
+    editorPanel.style.display = 'block'; // Force show
+
+    // Store active ID for the global color updater
+    window.activeBlockId = block.id;
 
     const container = document.getElementById('ms-active-block-settings');
     container.innerHTML = '';
 
+    // --- STRIP EDITOR (Updated Style) ---
     if (block.type === 'strip') {
-        const currentPadding = block.content?.padding || '20px';
-        const currentOuterPadding = block.styles?.padding || '10px';
-        const currentOuterMargin = block.styles?.margin || '0px';
         container.innerHTML = `
-            <div class="ms-field">
-                <label>Background Color</label>
-                <input type="color" id="edit-strip-bg" value="${block.content.bgColor || '#ffffff'}">
-            </div>
-            <div class="ms-field">
-                <label><input type="checkbox" id="edit-strip-fullwidth" ${block.content.fullWidth ? 'checked' : ''}> Full width</label>
-                <div class="ms-muted">Full width removes outer spacing so the strip reaches the email edge.</div>
-            </div>
-            <div class="ms-field">
-                <label>Strip padding (px)</label>
-                <input type="number" min="0" id="edit-strip-padding" value="${parseInt(currentPadding, 10) || 0}">
-            </div>
-            <div class="ms-field">
-                <label>Outer padding (px)</label>
-                <input type="number" min="0" id="edit-strip-outer-padding" value="${parseInt(currentOuterPadding, 10) || 0}">
-            </div>
-            <div class="ms-field">
-                <label>Outer margin (px)</label>
-                <input type="number" min="0" id="edit-strip-outer-margin" value="${parseInt(currentOuterMargin, 10) || 0}">
+            <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
+                <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Strip Settings</div>
+                
+                ${renderModernColorPicker('Background Color', 'strip-bg', block.content.bgColor || '#ffffff', 'updateActiveBlockBg')}
+                
+                <div class="ms-muted" style="margin-top:8px; font-size:12px;">
+                    Strips span the full width of the email. Drop other blocks inside.
+                </div>
             </div>
         `;
-
-        const bgInput = container.querySelector('#edit-strip-bg');
-        const fullWidthInput = container.querySelector('#edit-strip-fullwidth');
-        const paddingInput = container.querySelector('#edit-strip-padding');
-        const outerPaddingInput = container.querySelector('#edit-strip-outer-padding');
-        const outerMarginInput = container.querySelector('#edit-strip-outer-margin');
-
-        const syncStripStyles = () => {
-            block.content.bgColor = bgInput.value;
-            block.content.fullWidth = fullWidthInput.checked;
-            block.content.padding = `${Number(paddingInput.value || 0)}px`;
-            block.styles = block.styles || {};
-            if (block.content.fullWidth) {
-                block.styles.padding = '0px';
-                block.styles.margin = '0px';
-            } else {
-                block.styles.padding = `${Number(outerPaddingInput.value || 0)}px`;
-                block.styles.margin = `${Number(outerMarginInput.value || 0)}px`;
-            }
-            renderBuilderCanvas();
-        };
-
-        [bgInput, fullWidthInput, paddingInput, outerPaddingInput, outerMarginInput].forEach((input) => {
-            input.addEventListener('input', syncStripStyles);
-            input.addEventListener('change', syncStripStyles);
-        });
     }
+    // --- TEXT EDITOR ---
     else if (block.type === 'text') {
         container.innerHTML = `
             <div class="ms-field">
                 <label>Content (HTML allowed)</label>
-                <textarea id="edit-text-val" rows="10" style="width:100%;">${block.content.text}</textarea>
+                <textarea id="edit-text-val" rows="10" style="width:100%; border-radius:8px; border:1px solid #e2e8f0; padding:10px;">${block.content.text}</textarea>
             </div>
         `;
         container.querySelector('#edit-text-val').addEventListener('input', (e) => {
             block.content.text = e.target.value;
             renderBuilderCanvas();
         });
-    } 
+    }
+    // --- BUTTON EDITOR ---
     else if (block.type === 'button') {
         container.innerHTML = `
             <div class="ms-field"><label>Button Label</label><input id="edit-btn-label" value="${block.content.label}"></div>
@@ -2589,6 +2680,7 @@ function openBlockEditor(block) {
         container.querySelector('#edit-btn-label').addEventListener('input', (e) => { block.content.label = e.target.value; renderBuilderCanvas(); });
         container.querySelector('#edit-btn-color').addEventListener('input', (e) => { block.content.color = e.target.value; renderBuilderCanvas(); });
     }
+    // --- IMAGE EDITOR ---
     else if (block.type === 'image') {
         container.innerHTML = `
             <div class="ms-field"><label>Image URL</label><input id="edit-img-src" value="${block.content.src}"></div>
