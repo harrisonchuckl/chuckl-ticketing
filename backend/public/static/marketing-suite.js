@@ -939,6 +939,10 @@ async function renderTemplateEditor(templateId) {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
             <span>Divider</span>
           </div>
+          <div class="ms-draggable-block" draggable="true" data-type="space">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16"/><path d="M7 6l-3 3 3 3M17 6l3 3-3 3"/></svg>
+            <span>Space</span>
+          </div>
           <div class="ms-draggable-block" draggable="true" data-type="image">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span>Image</span>
@@ -2655,6 +2659,9 @@ case 'strip': return {
             paddingTop: 18,
             paddingBottom: 18,
         };
+        case 'space': return {
+            height: 24,
+        };
         case 'social': return { fb: '#', ig: '#', tw: '#' };
         case 'video': return { url: '', thumbnail: placeholderLarge };
         case 'code': return { html: '' };
@@ -2686,13 +2693,35 @@ function collectShowImages(show) {
         seen.add(clean);
         images.push({ url: clean, label });
     };
-    addImage(show.imageUrl, 'Main image');
+    const primaryImage =
+        show.imageUrl ||
+        show.image?.url ||
+        show.image?.src ||
+        show.image?.imageUrl ||
+        show.image ||
+        show.heroImageUrl ||
+        show.mainImageUrl;
+    addImage(primaryImage, 'Main image');
     const additionalImages = Array.isArray(show.additionalImages)
         ? show.additionalImages
         : Array.isArray(show.additionalImageUrls)
             ? show.additionalImageUrls
             : [];
-    additionalImages.forEach((url, index) => addImage(url, `Supporting image ${index + 1}`));
+    additionalImages.forEach((entry, index) => {
+        if (typeof entry === 'string') {
+            addImage(entry, `Supporting image ${index + 1}`);
+        } else if (entry && typeof entry === 'object') {
+            addImage(entry.url || entry.src || entry.imageUrl, `Supporting image ${index + 1}`);
+        }
+    });
+    const galleryImages = Array.isArray(show.galleryImages) ? show.galleryImages : [];
+    galleryImages.forEach((entry, index) => {
+        if (typeof entry === 'string') {
+            addImage(entry, `Gallery image ${index + 1}`);
+        } else if (entry && typeof entry === 'object') {
+            addImage(entry.url || entry.src || entry.imageUrl, `Gallery image ${index + 1}`);
+        }
+    });
     const nestedImages = Array.isArray(show.images) ? show.images : [];
     nestedImages.forEach((entry, index) => {
         if (typeof entry === 'string') {
@@ -2707,14 +2736,6 @@ function collectShowImages(show) {
 function ensureShowImages(showId) {
     if (!showId) return Promise.resolve(null);
     const existing = appState.shows.find((show) => show.id === showId);
-    if (
-        existing &&
-        (Object.prototype.hasOwnProperty.call(existing, 'additionalImages') ||
-            Object.prototype.hasOwnProperty.call(existing, 'images') ||
-            Object.prototype.hasOwnProperty.call(existing, 'additionalImageUrls'))
-    ) {
-        return Promise.resolve(existing);
-    }
     if (existing && existing._imagesLoaded) {
         return Promise.resolve(existing);
     }
@@ -3020,6 +3041,11 @@ function getPreviewHtml(block) {
                 </div>
             `;
         }
+        case 'space': {
+            const heightValue = Number.parseInt(c.height, 10);
+            const height = Number.isFinite(heightValue) ? heightValue : 24;
+            return `<div class="ms-space-block" style="height:${height}px;"></div>`;
+        }
         case 'social': return `<div style="text-align:center; display:flex; justify-content:center; gap:10px;">Social Icons Placeholder</div>`;
         case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;">▶</div></div>`;
         case 'code': return `<div style="background:#f1f5f9; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code /&gt;</div>`;
@@ -3067,6 +3093,7 @@ function getBlockTypeLabel(type) {
         boxedtext: 'Boxed Text',
         imagegroup: 'Image Group',
         imagecard: 'Image Card',
+        space: 'Space',
     };
     if (!type) return 'Block';
     return labels[type] || `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
@@ -3180,6 +3207,21 @@ function openBlockEditor(block) {
                 </div>
 
                 ${renderModernColorPicker('Line Color', 'divider-line', block.content.color || '#e2e8f0', 'updateActiveBlockColor')}
+            </div>
+        `;
+    }
+    else if (block.type === 'space') {
+        const heightValue = Number.parseInt(block.content.height, 10);
+        const height = Number.isFinite(heightValue) ? heightValue : 24;
+        container.innerHTML = `
+            <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
+                <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Space Settings</div>
+                <div class="ms-field">
+                    <label>Height (px)</label>
+                    <input type="range" id="slider-height" min="4" max="120" step="2" value="${height}" oninput="window.updateBlockProp('height', this.value)">
+                    <input type="number" id="input-height" min="4" max="120" value="${height}" oninput="window.updateBlockProp('height', this.value)">
+                </div>
+                <div class="ms-muted" style="margin-top:8px;">Increase or decrease the spacer height to adjust layout gaps.</div>
             </div>
         `;
     }
@@ -3553,6 +3595,13 @@ function openBlockEditor(block) {
                 : '<div class="ms-muted">Select a show to browse its images.</div>';
             bindShowImageTiles();
         };
+
+        if (selectedShowId) {
+            ensureShowImages(selectedShowId).then((loadedShow) => {
+                if (!loadedShow) return;
+                refreshShowGrid(loadedShow, block.content.showImageUrl || block.content.src);
+            });
+        }
 
         if (showSelect) showSelect.value = selectedShowId;
         if (linkShowSelect) linkShowSelect.value = linkShowId;

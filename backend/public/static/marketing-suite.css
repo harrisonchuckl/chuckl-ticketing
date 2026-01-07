@@ -265,7 +265,7 @@ body {
 .ms-builder-block {
   position: relative;
   border: 1px solid transparent;
-  padding: 10px;
+  padding: 6px;
   transition: border 0.2s;
   height: auto; 
   overflow: visible !important; /* CRITICAL: Allows buttons to sit above */
@@ -355,7 +355,7 @@ body {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 10px;
 }
 
 .ms-strip-wrapper {
@@ -366,8 +366,21 @@ body {
 .ms-strip-inner {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   min-height: 60px;
+}
+
+.ms-space-block {
+  width: 100%;
+  border: 1px dashed #e2e8f0;
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(226, 232, 240, 0.4),
+    rgba(226, 232, 240, 0.4) 6px,
+    rgba(248, 250, 252, 0.6) 6px,
+    rgba(248, 250, 252, 0.6) 12px
+  );
 }
 
 /* 7. SIDEBAR & DRAGGABLE ITEMS */
