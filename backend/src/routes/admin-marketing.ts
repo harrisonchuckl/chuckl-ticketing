@@ -1136,6 +1136,196 @@ router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (r
   res.json(response);
 });
 
+router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
+  if (!role) return;
+  const rawKind = String(req.params.kind || '').trim().toUpperCase();
+  const kind = Object.values(MarketingIntelligentCampaignKind).includes(rawKind as MarketingIntelligentCampaignKind)
+    ? (rawKind as MarketingIntelligentCampaignKind)
+    : null;
+  if (!kind) {
+    return res.status(400).json({ ok: false, message: 'Invalid intelligent campaign kind.' });
+  }
+  if (req.body?.dryRun !== true) {
+    return res.status(400).json({ ok: false, message: 'dryRun must be true.' });
+  }
+
+  const config = await prisma.marketingIntelligentCampaign.findFirst({
+    where: { tenantId, kind },
+    include: { template: true },
+  });
+  if (!config || !config.template) {
+    return res.status(404).json({ ok: false, message: 'Intelligent campaign not configured.' });
+  }
+
+  const tenant = await prisma.user.findUnique({
+    where: { id: tenantId },
+    select: { tradingName: true, companyName: true, name: true, storefrontSlug: true, id: true },
+  });
+  if (!tenant) return res.status(404).json({ ok: false, message: 'Tenant not found' });
+
+  const contacts = await prisma.marketingContact.findMany({
+    where: { tenantId },
+    include: { consents: { orderBy: { createdAt: 'desc' } } },
+  });
+  const suppressions = await prisma.marketingSuppression.findMany({
+    where: { tenantId },
+    select: { email: true, type: true },
+  });
+  const suppressionMap = new Map(
+    suppressions.map((suppression) => [normaliseEmail(suppression.email), suppression])
+  );
+
+  const configOptions = resolveIntelligentConfig(config.configJson);
+  const upcomingShows = await getTenantUpcomingShows(tenantId, configOptions.horizonDays);
+
+  let eligibleCount = 0;
+  let suppressedCount = 0;
+  let capBlockedCount = 0;
+  const sampleRecipients: Array<{ email: string; reasons: string[]; topShows: string[] }> = [];
+
+  for (const contact of contacts) {
+    const email = normaliseEmail(contact.email || '');
+    if (!email) continue;
+
+    const reasons = new Set<string>();
+    const suppression = suppressionMap.get(email) || null;
+    const consentStatus = (contact.consents[0]?.status as MarketingConsentStatus) || MarketingConsentStatus.TRANSACTIONAL_ONLY;
+    const suppressionDecision = shouldSuppressContact(consentStatus, suppression);
+    if (suppressionDecision.suppressed && suppressionDecision.reason) {
+      reasons.add(suppressionDecision.reason);
+    }
+
+    if (suppressionDecision.suppressed) {
+      suppressedCount += 1;
+      if (sampleRecipients.length < 20) {
+        sampleRecipients.push({ email, reasons: Array.from(reasons), topShows: [] });
+      }
+      continue;
+    }
+
+    let recommendedShows = await rankShowsForContact({ tenantId, email }, upcomingShows, { limit: configOptions.limit });
+    if (recommendedShows.length) {
+      const purchaseChecks = await Promise.all(
+        recommendedShows.map(async (show) => ({
+          show,
+          purchased: await hasPurchasedShow(tenantId, email, show.showId),
+        }))
+      );
+      recommendedShows = purchaseChecks.filter((entry) => !entry.purchased).map((entry) => entry.show);
+    }
+
+    if (!recommendedShows.length) {
+      capBlockedCount += 1;
+      reasons.add('no_recommendations');
+      if (sampleRecipients.length < 20) {
+        sampleRecipients.push({ email, reasons: Array.from(reasons), topShows: [] });
+      }
+      continue;
+    }
+
+    const sendCap = await countIntelligentSendsLast30d(tenantId, email);
+    sendCap.reasons.forEach((reason) => reasons.add(reason));
+
+    const topShowId = recommendedShows[0]?.showId;
+    if (topShowId) {
+      const recentEligibility = await hasEmailedShowRecently(tenantId, email, topShowId, configOptions.cooldownDays);
+      recentEligibility.reasons.forEach((reason) => reasons.add(reason));
+    }
+
+    if (!sendCap.eligible || reasons.size > 0) {
+      capBlockedCount += 1;
+      if (sampleRecipients.length < 20) {
+        sampleRecipients.push({
+          email,
+          reasons: Array.from(reasons),
+          topShows: recommendedShows.slice(0, 3).map((show) => show.title || show.showId),
+        });
+      }
+      continue;
+    }
+
+    const token = createUnsubscribeToken({ tenantId, email });
+    const unsubscribeUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/u/${encodeURIComponent(
+      tenant.storefrontSlug || tenant.id
+    )}/${encodeURIComponent(token)}`;
+    const preferencesToken = createPreferencesToken({ tenantId, email });
+    const preferencesUrl = `${PUBLIC_BASE_URL.replace(/\/+$/, '')}/preferences/${encodeURIComponent(
+      tenant.storefrontSlug || tenant.id
+    )}/${encodeURIComponent(preferencesToken)}`;
+
+    const recommendedShowsPayload = recommendedShows.map((show) => ({
+      title: show.title,
+      date: show.date,
+      venueName: show.venueName,
+      town: show.town,
+      county: show.county,
+      bookingUrl: show.bookingUrl,
+      imageUrl: show.imageUrl,
+      reason: show.reason,
+    }));
+    const recommendedShowsHtml = buildIntelligentShowsHtml(recommendedShowsPayload);
+
+    const mergeContext = {
+      ...buildTemplateMergeContext({
+        contact: {
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          email,
+          town: contact.town,
+        },
+        links: {
+          managePreferencesLink: preferencesUrl,
+          unsubscribeLink: unsubscribeUrl,
+        },
+      }),
+      recommendedShows: recommendedShowsPayload,
+      recommendedShowsHtml,
+      meta: {
+        kind,
+        reasons: Array.from(reasons),
+      },
+    };
+
+    if (config.template.compiledHtml) {
+      renderCompiledTemplate({
+        compiledHtml: config.template.compiledHtml,
+        mergeContext,
+        unsubscribeUrl,
+        preferencesUrl,
+        recommendedShows: recommendedShowsHtml,
+      });
+      if (config.template.compiledText) {
+        renderMergeTags(config.template.compiledText, mergeContext);
+      }
+    } else {
+      renderMarketingTemplate(config.template.mjmlBody, {
+        firstName: contact.firstName || '',
+        lastName: contact.lastName || '',
+        email,
+        tenantName: tenantNameFrom(tenant),
+        unsubscribeUrl,
+        preferencesUrl,
+        recommendedShows: recommendedShowsHtml,
+      });
+    }
+
+    eligibleCount += 1;
+    if (sampleRecipients.length < 20) {
+      sampleRecipients.push({
+        email,
+        reasons: Array.from(reasons),
+        topShows: recommendedShows.slice(0, 3).map((show) => show.title || show.showId),
+      });
+    }
+  }
+
+  const response = { ok: true, eligibleCount, suppressedCount, capBlockedCount, sampleRecipients };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
 router.post('/api/marketing/intelligent/:kind/preview', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
