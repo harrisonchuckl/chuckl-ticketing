@@ -109,7 +109,7 @@ body {
   width: 600px;
   background-color: var(--canvas-bg, #ffffff);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  padding: 80px 0 200px 0; /* padding-top 80px allows dropping at top */
+  padding: 0;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -227,6 +227,7 @@ body {
   border-left: 1px solid var(--ms-border);
   display: flex;
   flex-direction: column;
+  min-height: 100%;
 }
 
 .ms-sidebar-tabs { display: flex; border-bottom: 1px solid var(--ms-border); }
@@ -244,8 +245,9 @@ body {
   border-bottom: 2px solid var(--ms-primary);
 }
 
-.ms-sidebar-panel { display: none; padding: 16px; overflow-y: auto; }
+.ms-sidebar-panel { display: none; padding: 16px; overflow-y: auto; flex: 1; }
 .ms-sidebar-panel.active { display: block; }
+.ms-sidebar-panel#ms-block-editor { overflow: visible; padding-bottom: 0; }
 
 .ms-block-grid {
   display: grid;
@@ -278,7 +280,7 @@ body {
 .ms-sidebar-panel.hidden { display: none !important; }
 
 /* MODERN COLOR PICKER STYLES */
-.ms-color-picker-wrapper { position: relative; }
+.ms-color-picker-wrapper { position: relative; overflow: visible; }
 .ms-color-input-group { display: flex; align-items: center; gap: 8px; border: 1px solid var(--ms-border); padding: 4px; border-radius: 8px; background: white; }
 .ms-color-preview {
     width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ddd; cursor: pointer; flex-shrink: 0;
@@ -288,7 +290,7 @@ body {
 .ms-color-popover {
     position: absolute; top: 100%; left: 0; width: 240px; background: white; border: 1px solid var(--ms-border);
     border-radius: 8px; padding: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 50;
-    display: none; margin-top: 8px;
+    display: none; margin-top: 8px; overflow: hidden;
 }
 .ms-color-popover.open { display: block; }
 .ms-palette-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
