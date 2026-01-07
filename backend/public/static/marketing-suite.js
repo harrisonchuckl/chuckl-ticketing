@@ -2219,6 +2219,34 @@ function getPlaceholderImage(width, height) {
 function setupVisualBuilder() {
   const canvas = document.getElementById('ms-builder-canvas');
   if (!canvas) return;
+  const sidebarPanels = Array.from(document.querySelectorAll('.ms-sidebar-panel'));
+
+  const showSidebarPanel = (panelId) => {
+    sidebarPanels.forEach((panel) => {
+      const isTarget = panel.id === panelId;
+      panel.classList.toggle('active', isTarget);
+      panel.classList.toggle('hidden', panel.id === 'ms-block-editor' && !isTarget);
+      panel.style.display = isTarget ? 'block' : 'none';
+    });
+  };
+
+  const resetSidebarPanels = () => {
+    sidebarPanels.forEach((panel) => {
+      panel.classList.remove('active');
+      panel.classList.remove('hidden');
+      panel.style.display = '';
+    });
+  };
+
+  const syncSidebarForContent = () => {
+    const activeBlock =
+      window.activeBlockId && findBlockById(window.editorBlocks || [], window.activeBlockId)?.block;
+    if (activeBlock) {
+      openBlockEditor(activeBlock);
+    } else {
+      showSidebarPanel('ms-sidebar-blocks');
+    }
+  };
 
   // Background Color Logic
   const bgInput = document.getElementById('ms-style-bg');
@@ -2230,19 +2258,23 @@ function setupVisualBuilder() {
     });
   }
 
-  // 1. Initialize State    window.editorBlocks = window.editorBlocks.length ? window.editorBlocks : [];
-    renderBuilderCanvas();
+  // 1. Initialize State
+  window.editorBlocks = window.editorBlocks.length ? window.editorBlocks : [];
+  renderBuilderCanvas();
 
     // 2. Sidebar Tab Switching
     const tabBtns = document.querySelectorAll('.ms-tab-btn');
     tabBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.ms-tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
-            document.getElementById('ms-block-editor').classList.add('hidden');
+            resetSidebarPanels();
             e.target.classList.add('active');
             const targetId = `ms-sidebar-${e.target.dataset.sidebarTab}`;
-            document.getElementById(targetId).classList.add('active');
+            if (targetId === 'ms-sidebar-blocks') {
+                syncSidebarForContent();
+            } else {
+                showSidebarPanel(targetId);
+            }
         });
     });
 
@@ -2404,18 +2436,8 @@ canvas.addEventListener('drop', (e) => {
     const backBtn = document.getElementById('ms-back-to-blocks');
     if (backBtn) {
        backBtn.addEventListener('click', () => {
-    // Hide Editor
-    const editor = document.getElementById('ms-block-editor');
-    editor.classList.add('hidden');
-    editor.classList.remove('active');
-    editor.style.display = 'none'; // Force hide
-
-    // Show Blocks
-    const blocks = document.getElementById('ms-sidebar-blocks');
-    blocks.classList.add('active');
-    blocks.style.display = 'block'; // Force show
-
-    // Reset Tabs
+    window.activeBlockId = null;
+    showSidebarPanel('ms-sidebar-blocks');
     document.querySelectorAll('.ms-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelector('[data-sidebar-tab="blocks"]').classList.add('active');
     
@@ -2423,6 +2445,16 @@ canvas.addEventListener('drop', (e) => {
     document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
 });
     }
+
+    canvas.addEventListener('click', (event) => {
+        if (event.target.closest('.ms-builder-block')) return;
+        document.querySelectorAll('.ms-builder-block').forEach(b => b.classList.remove('is-selected'));
+        window.activeBlockId = null;
+        const contentTab = document.querySelector('[data-sidebar-tab="blocks"]');
+        if (contentTab?.classList.contains('active')) {
+            showSidebarPanel('ms-sidebar-blocks');
+        }
+    });
 }
 
 /**
@@ -2723,8 +2755,20 @@ window.deleteBlock = function(id) {
     }
     removeBlockById(window.editorBlocks, id);
     renderBuilderCanvas();
-    document.getElementById('ms-block-editor').classList.add('hidden');
-    document.getElementById('ms-sidebar-blocks').classList.add('active');
+    if (window.activeBlockId === id) {
+        window.activeBlockId = null;
+    }
+    const editorPanel = document.getElementById('ms-block-editor');
+    const blocksPanel = document.getElementById('ms-sidebar-blocks');
+    if (editorPanel) {
+        editorPanel.classList.add('hidden');
+        editorPanel.classList.remove('active');
+        editorPanel.style.display = 'none';
+    }
+    if (blocksPanel) {
+        blocksPanel.classList.add('active');
+        blocksPanel.style.display = 'block';
+    }
 }
 
 function getBlockTypeLabel(type) {
@@ -2749,17 +2793,17 @@ function openBlockEditor(block) {
         window.activeBlockId = block.id;
         return;
     }
-    // 1. Ensure all other panels are hidden specifically
-    document.querySelectorAll('.ms-sidebar-panel').forEach(p => {
-        p.classList.remove('active');
-        p.style.display = 'none'; // Force hide
+    const panels = Array.from(document.querySelectorAll('.ms-sidebar-panel'));
+    panels.forEach((panel) => {
+        const isTarget = panel.id === 'ms-block-editor';
+        panel.classList.toggle('active', isTarget);
+        panel.classList.toggle('hidden', !isTarget);
+        panel.style.display = isTarget ? 'block' : 'none';
     });
-
-    // 2. Show Editor Panel
     const editorPanel = document.getElementById('ms-block-editor');
     editorPanel.classList.remove('hidden');
     editorPanel.classList.add('active');
-    editorPanel.style.display = 'block'; // Force show
+    editorPanel.style.display = 'block';
 
     // Store active ID for the global color updater
     window.activeBlockId = block.id;
@@ -3030,10 +3074,15 @@ function openBlockEditor(block) {
 
 /* Opens the editor for the static footer */
 function openFooterEditor() {
-    document.querySelectorAll('.ms-sidebar-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.ms-sidebar-panel').forEach(p => {
+        p.classList.remove('active');
+        p.classList.add('hidden');
+        p.style.display = 'none';
+    });
     const editorPanel = document.getElementById('ms-block-editor');
     editorPanel.classList.remove('hidden');
     editorPanel.classList.add('active');
+    editorPanel.style.display = 'block';
     updateBlockEditorTitle('Footer');
 
     const container = document.getElementById('ms-active-block-settings');
