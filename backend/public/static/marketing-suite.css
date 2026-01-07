@@ -204,12 +204,12 @@ body {
   padding-right: 0;
 }
 
-.ms-builder-block.is-strip .block-actions {
+.ms-builder-block.is-strip > .block-actions {
   pointer-events: none;
   z-index: 2;
 }
 
-.ms-builder-block.is-strip.is-selected .block-actions {
+.ms-builder-block.is-strip.is-selected > .block-actions {
   pointer-events: auto;
 }
 
