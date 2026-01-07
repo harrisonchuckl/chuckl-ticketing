@@ -974,6 +974,10 @@ async function renderTemplateEditor(templateId) {
     <div id="ms-sidebar-styles" class="ms-sidebar-panel">
       <div class="ms-sidebar-section-title">Page styles</div>
       ${renderModernColorPicker('Page Background', 'global-bg', '#ffffff', 'updateCanvasBg')}
+      <div class="ms-field ms-palette-field">
+        <label>Background palette</label>
+        ${renderInlinePalette('global-bg', 'updateCanvasBg')}
+      </div>
       <div class="ms-field" style="margin-top:12px;">
         <label>Gradient presets</label>
         <div class="ms-gradient-grid" id="ms-gradient-presets"></div>
@@ -3074,6 +3078,19 @@ const COLOR_PALETTE = [
     ['#d946ef', '#e879f9', '#f0abfc', '#f5d0fe', '#fae8ff', '#fdf4ff', '#fffaff'], // Fuchsias
 ];
 
+function renderInlinePalette(id, updateFunctionGlobalName) {
+    const paletteHtml = COLOR_PALETTE.map(row =>
+        row
+            .map(
+                (color) =>
+                    `<button class="ms-color-swatch ms-color-swatch-button" type="button" aria-label="${color}" style="background:${color}" onclick="window.pickColor('${id}', '${color}', '${updateFunctionGlobalName}')"></button>`
+            )
+            .join('')
+    ).join('');
+
+    return `<div class="ms-palette-grid ms-palette-grid-inline">${paletteHtml}</div>`;
+}
+
 function renderModernColorPicker(label, id, value, updateFunctionGlobalName) {
     const safeValue = value || '#ffffff';
     // Generate Palette HTML
@@ -3099,14 +3116,16 @@ function renderModernColorPicker(label, id, value, updateFunctionGlobalName) {
 }
 
 const GRADIENT_PRESETS = [
-    { name: 'Soft gray', start: '#111827', end: '#f9fafb', direction: 'to bottom' },
-    { name: 'Slate haze', start: '#0f172a', end: '#94a3b8', direction: 'to bottom' },
+    { name: 'Ink fade', start: '#0f172a', end: '#f8fafc', direction: 'to bottom' },
+    { name: 'Graphite mist', start: '#111827', end: '#e2e8f0', direction: 'to bottom' },
     { name: 'Warm stone', start: '#1f2937', end: '#e5e7eb', direction: 'to bottom' },
+    { name: 'Silver wash', start: '#334155', end: '#f1f5f9', direction: 'to bottom' },
     { name: 'Misty blue', start: '#0ea5e9', end: '#e0f2fe', direction: 'to bottom' },
-    { name: 'Lavender', start: '#6366f1', end: '#e0e7ff', direction: 'to bottom' },
+    { name: 'Lavender haze', start: '#6366f1', end: '#e0e7ff', direction: 'to bottom' },
     { name: 'Sea glass', start: '#14b8a6', end: '#ccfbf1', direction: 'to bottom' },
     { name: 'Sunset', start: '#f97316', end: '#fde68a', direction: 'to right' },
     { name: 'Rose glow', start: '#f43f5e', end: '#fecdd3', direction: 'to right' },
+    { name: 'Citrus pop', start: '#84cc16', end: '#facc15', direction: 'to right' },
     { name: 'Vibrant purple', start: '#9333ea', end: '#f472b6', direction: '135deg' },
     { name: 'Electric blue', start: '#2563eb', end: '#22d3ee', direction: '135deg' },
 ];
