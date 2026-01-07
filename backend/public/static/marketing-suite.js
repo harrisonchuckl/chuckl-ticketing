@@ -1158,6 +1158,13 @@ function getActiveBoxedTextBlock() {
     return block;
 }
 
+function getActiveButtonBlock() {
+    if (!window.activeBlockId) return null;
+    const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+    if (!block || block.type !== 'button') return null;
+    return block;
+}
+
 window.updateStripTransparency = function(isTransparent) {
     const block = getActiveStripBlock();
     if (!block || !block.content) return;
@@ -1266,6 +1273,22 @@ window.updateBoxedTextGradientEnd = function(color) {
         end: window.currentBoxedTextGradientEnd,
         direction: window.currentBoxedTextGradientDirection || 'to bottom',
     });
+};
+
+window.updateActiveButtonBg = function(color) {
+    const block = getActiveButtonBlock();
+    if (!block || !block.content) return;
+    block.content.color = color;
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
+};
+
+window.updateActiveButtonText = function(color) {
+    const block = getActiveButtonBlock();
+    if (!block || !block.content) return;
+    block.content.textColor = color;
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
 };
 
 window.updateActiveBlockColor = function(color) {
@@ -2396,6 +2419,12 @@ const TEXT_STYLE_PRESETS = [
     { value: 'heading-4', label: 'Heading 4', tag: 'h4', fontSize: '18px', fontWeight: '600', lineHeight: '1.3' },
 ];
 
+function renderFontFamilyOptions(selectedValue) {
+    return Object.keys(FONT_FAMILY_MAP)
+        .map((font) => `<option value="${font}" ${font === selectedValue ? 'selected' : ''}>${font}</option>`)
+        .join('');
+}
+
 // Helper to generate SVG data URI for placeholders
 function getPlaceholderImage(width, height) {
     const svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -2792,7 +2821,20 @@ case 'strip': return {
             };
         case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
         case 'imagecard': return { src: placeholderLarge, caption: '<p style="margin-top:10px;">Image caption goes here.</p>' };
-        case 'button': return { label: 'Click Here', url: 'https://', color: '#4f46e5', align: 'center' };
+        case 'button': return {
+            label: 'Click Here',
+            url: 'https://',
+            color: '#4f46e5',
+            textColor: '#ffffff',
+            align: 'center',
+            fontFamily: 'Inter',
+            fontSize: 16,
+            fontWeight: 600,
+            borderRadius: 6,
+            width: '',
+            height: '',
+            linkShowId: '',
+        };
         case 'divider': return {
             color: '#e2e8f0',
             thickness: 1,
@@ -3196,7 +3238,36 @@ function getPreviewHtml(block) {
             </div>`; 
         case 'imagecard': 
             return `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%; display:block;"><div style="padding:15px;">${c.caption}</div></div>`; 
-        case 'button': return `<div style="text-align:${c.align};"><a class="ms-primary" style="background:${c.color};">${c.label}</a></div>`;
+        case 'button': {
+            const radiusValue = Number.parseInt(c.borderRadius, 10);
+            const radius = Number.isFinite(radiusValue) ? radiusValue : 6;
+            const fontSizeValue = Number.parseInt(c.fontSize, 10);
+            const fontSize = Number.isFinite(fontSizeValue) ? fontSizeValue : 16;
+            const fontWeightValue = Number.parseInt(c.fontWeight, 10);
+            const fontWeight = Number.isFinite(fontWeightValue) ? fontWeightValue : 600;
+            const widthValue = Number.parseInt(c.width, 10);
+            const heightValue = Number.parseInt(c.height, 10);
+            const width = Number.isFinite(widthValue) && widthValue > 0 ? widthValue : null;
+            const height = Number.isFinite(heightValue) && heightValue > 0 ? heightValue : null;
+            const fontFamily = FONT_FAMILY_MAP[c.fontFamily] || c.fontFamily || '"Inter", "Helvetica Neue", Arial, sans-serif';
+            const styleParts = [
+                `background:${c.color || '#4f46e5'};`,
+                `color:${c.textColor || '#ffffff'};`,
+                `border-radius:${radius}px;`,
+                `font-weight:${fontWeight};`,
+                `font-size:${fontSize}px;`,
+                `font-family:${fontFamily};`,
+                'text-decoration:none;',
+                'display:inline-flex;',
+                'align-items:center;',
+                'justify-content:center;',
+                'padding:12px 22px;',
+                'max-width:100%;',
+            ];
+            if (width) styleParts.push(`width:${width}px;`);
+            if (height) styleParts.push(`height:${height}px;`);
+            return `<div style="text-align:${c.align || 'center'};"><a class="ms-primary" style="${styleParts.join('')}">${c.label}</a></div>`;
+        }
         case 'divider': {
             const thicknessValue = Number.parseInt(c.thickness, 10);
             const thickness = Number.isFinite(thicknessValue) ? thicknessValue : 1;
@@ -3772,21 +3843,207 @@ function openBlockEditor(block) {
     }
     // --- BUTTON EDITOR ---
     else if (block.type === 'button') {
+        const showOptions = appState.shows
+            .map((show) => `<option value="${show.id}">${escapeHtml(show.title)}</option>`)
+            .join('');
+        const linkShowId = block.content.linkShowId || '';
+        const selectedShow = appState.shows.find((show) => show.id === linkShowId);
+        const selectedShowLink = selectedShow ? getShowLink(selectedShow) : '';
+        const fontFamily = block.content.fontFamily || 'Inter';
+        const fontSize = Number.isFinite(Number.parseInt(block.content.fontSize, 10))
+            ? Number.parseInt(block.content.fontSize, 10)
+            : 16;
+        const fontWeight = Number.isFinite(Number.parseInt(block.content.fontWeight, 10))
+            ? Number.parseInt(block.content.fontWeight, 10)
+            : 600;
+        const borderRadius = Number.isFinite(Number.parseInt(block.content.borderRadius, 10))
+            ? Number.parseInt(block.content.borderRadius, 10)
+            : 6;
+        const width = Number.parseInt(block.content.width, 10);
+        const height = Number.parseInt(block.content.height, 10);
+        const widthValue = Number.isFinite(width) ? width : '';
+        const heightValue = Number.isFinite(height) ? height : '';
+        const align = block.content.align || 'center';
+        const maxButtonWidth = 600;
+
         container.innerHTML = `
-            <div class="ms-field"><label>Button Label</label><input id="edit-btn-label" value="${block.content.label}"></div>
-            <div class="ms-field"><label>Link URL</label><input id="edit-btn-url" value="${block.content.url}"></div>
-            <div class="ms-field"><label>Color</label><input type="color" id="edit-btn-color" value="${block.content.color}"></div>
+            <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
+                <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Button Settings</div>
+                <div class="ms-field"><label>Button Label</label><input id="edit-btn-label" value="${escapeHtml(block.content.label || '')}"></div>
+                <div class="ms-field"><label>Link URL</label><input id="edit-btn-url" value="${escapeHtml(block.content.url || '')}" placeholder="https://example.com"></div>
+                <div class="ms-field">
+                    <label>Link to show</label>
+                    <select id="ms-button-link-show">
+                        <option value="">No show link</option>
+                        ${showOptions}
+                    </select>
+                    <div class="ms-muted">Choose a show to auto-fill the button URL.</div>
+                </div>
+
+                <div class="ms-field">
+                    <label>Alignment</label>
+                    <select id="edit-btn-align">
+                        <option value="left" ${align === 'left' ? 'selected' : ''}>Left</option>
+                        <option value="center" ${align === 'center' ? 'selected' : ''}>Center</option>
+                        <option value="right" ${align === 'right' ? 'selected' : ''}>Right</option>
+                    </select>
+                </div>
+
+                <div class="ms-field">
+                    <label>Font family</label>
+                    <select id="edit-btn-font">
+                        ${renderFontFamilyOptions(fontFamily)}
+                    </select>
+                </div>
+                <div class="ms-field">
+                    <label>Font size (px)</label>
+                    <input type="number" id="edit-btn-font-size" min="10" max="48" value="${fontSize}">
+                </div>
+                <div class="ms-field">
+                    <label>Font weight</label>
+                    <select id="edit-btn-font-weight">
+                        <option value="400" ${fontWeight === 400 ? 'selected' : ''}>Regular</option>
+                        <option value="500" ${fontWeight === 500 ? 'selected' : ''}>Medium</option>
+                        <option value="600" ${fontWeight === 600 ? 'selected' : ''}>Semibold</option>
+                        <option value="700" ${fontWeight === 700 ? 'selected' : ''}>Bold</option>
+                    </select>
+                </div>
+
+                ${renderModernColorPicker('Button color', 'button-bg', block.content.color || '#4f46e5', 'updateActiveButtonBg')}
+                ${renderModernColorPicker('Text color', 'button-text', block.content.textColor || '#ffffff', 'updateActiveButtonText')}
+
+                <div class="ms-field" style="margin-top:12px;">
+                    <label>Corner radius (px)</label>
+                    <input type="number" id="edit-btn-radius" min="0" max="40" value="${borderRadius}">
+                </div>
+                <div class="ms-field">
+                    <label>Button width (px)</label>
+                    <input type="number" id="edit-btn-width" min="0" max="${maxButtonWidth}" value="${widthValue}" placeholder="Auto">
+                    <div class="ms-muted">Max width ${maxButtonWidth}px (email width).</div>
+                </div>
+                <div class="ms-field">
+                    <label>Button height (px)</label>
+                    <input type="number" id="edit-btn-height" min="0" value="${heightValue}" placeholder="Auto">
+                </div>
+            </div>
         `;
-        container.querySelector('#edit-btn-label').addEventListener('input', (e) => {
-            block.content.label = e.target.value;
+
+        const labelInput = container.querySelector('#edit-btn-label');
+        const urlInput = container.querySelector('#edit-btn-url');
+        const showSelect = container.querySelector('#ms-button-link-show');
+        const alignSelect = container.querySelector('#edit-btn-align');
+        const fontSelect = container.querySelector('#edit-btn-font');
+        const fontSizeInput = container.querySelector('#edit-btn-font-size');
+        const fontWeightSelect = container.querySelector('#edit-btn-font-weight');
+        const radiusInput = container.querySelector('#edit-btn-radius');
+        const widthInput = container.querySelector('#edit-btn-width');
+        const heightInput = container.querySelector('#edit-btn-height');
+
+        if (showSelect) showSelect.value = linkShowId;
+        if (selectedShowLink && urlInput && !block.content.url) {
+            urlInput.value = selectedShowLink;
+            block.content.url = selectedShowLink;
+        }
+
+        const updateButtonContent = () => {
             recordEditorHistory({ immediate: false });
             renderBuilderCanvas();
-        });
-        container.querySelector('#edit-btn-color').addEventListener('input', (e) => {
-            block.content.color = e.target.value;
-            recordEditorHistory({ immediate: false });
-            renderBuilderCanvas();
-        });
+        };
+
+        const clampButtonWidth = (value) => {
+            if (!value) return '';
+            const parsed = Number.parseInt(value, 10);
+            if (!Number.isFinite(parsed)) return '';
+            return Math.max(0, Math.min(parsed, maxButtonWidth));
+        };
+
+        if (labelInput) {
+            labelInput.addEventListener('input', (e) => {
+                block.content.label = e.target.value;
+                updateButtonContent();
+            });
+        }
+
+        if (urlInput) {
+            urlInput.addEventListener('input', (e) => {
+                block.content.url = e.target.value;
+                const currentShow = appState.shows.find((show) => show.id === block.content.linkShowId);
+                if (currentShow && getShowLink(currentShow) !== block.content.url) {
+                    block.content.linkShowId = '';
+                    if (showSelect) showSelect.value = '';
+                }
+                updateButtonContent();
+            });
+        }
+
+        if (showSelect) {
+            showSelect.addEventListener('change', () => {
+                const show = appState.shows.find((item) => item.id === showSelect.value);
+                if (show) {
+                    const showLink = getShowLink(show);
+                    block.content.url = showLink;
+                    block.content.linkShowId = show.id;
+                    if (urlInput) urlInput.value = showLink;
+                } else {
+                    block.content.linkShowId = '';
+                }
+                updateButtonContent();
+            });
+        }
+
+        if (alignSelect) {
+            alignSelect.addEventListener('change', (e) => {
+                block.content.align = e.target.value;
+                updateButtonContent();
+            });
+        }
+
+        if (fontSelect) {
+            fontSelect.addEventListener('change', (e) => {
+                block.content.fontFamily = e.target.value;
+                updateButtonContent();
+            });
+        }
+
+        if (fontSizeInput) {
+            fontSizeInput.addEventListener('input', (e) => {
+                block.content.fontSize = e.target.value;
+                updateButtonContent();
+            });
+        }
+
+        if (fontWeightSelect) {
+            fontWeightSelect.addEventListener('change', (e) => {
+                block.content.fontWeight = e.target.value;
+                updateButtonContent();
+            });
+        }
+
+        if (radiusInput) {
+            radiusInput.addEventListener('input', (e) => {
+                block.content.borderRadius = e.target.value;
+                updateButtonContent();
+            });
+        }
+
+        if (widthInput) {
+            widthInput.addEventListener('input', (e) => {
+                const nextWidth = clampButtonWidth(e.target.value);
+                block.content.width = nextWidth;
+                if (String(nextWidth) !== e.target.value) {
+                    e.target.value = nextWidth;
+                }
+                updateButtonContent();
+            });
+        }
+
+        if (heightInput) {
+            heightInput.addEventListener('input', (e) => {
+                const parsed = Number.parseInt(e.target.value, 10);
+                block.content.height = Number.isFinite(parsed) ? Math.max(0, parsed) : '';
+                updateButtonContent();
+            });
+        }
     }
     // --- IMAGE EDITOR ---
     else if (block.type === 'image') {
