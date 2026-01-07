@@ -2225,6 +2225,16 @@ const FONT_FAMILY_MAP = {
     Georgia: 'Georgia, "Times New Roman", serif',
     'Times New Roman': '"Times New Roman", Times, serif',
     'Courier New': '"Courier New", Courier, monospace',
+    Inter: '"Inter", "Helvetica Neue", Arial, sans-serif',
+    'DM Sans': '"DM Sans", "Helvetica Neue", Arial, sans-serif',
+    Manrope: '"Manrope", "Helvetica Neue", Arial, sans-serif',
+    Rubik: '"Rubik", "Helvetica Neue", Arial, sans-serif',
+    Quicksand: '"Quicksand", "Helvetica Neue", Arial, sans-serif',
+    Karla: '"Karla", "Helvetica Neue", Arial, sans-serif',
+    'Libre Franklin': '"Libre Franklin", "Helvetica Neue", Arial, sans-serif',
+    'Libre Baskerville': '"Libre Baskerville", Georgia, serif',
+    Lora: '"Lora", Georgia, serif',
+    'Space Grotesk': '"Space Grotesk", "Helvetica Neue", Arial, sans-serif',
     Roboto: '"Roboto", "Helvetica Neue", Arial, sans-serif',
     'Open Sans': '"Open Sans", "Helvetica Neue", Arial, sans-serif',
     Lato: '"Lato", "Helvetica Neue", Arial, sans-serif',
@@ -3076,6 +3086,16 @@ function openBlockEditor(block) {
                         <option value="Georgia">Georgia</option>
                         <option value="Times New Roman">Times New Roman</option>
                         <option value="Courier New">Courier New</option>
+                        <option value="Inter">Inter</option>
+                        <option value="DM Sans">DM Sans</option>
+                        <option value="Manrope">Manrope</option>
+                        <option value="Rubik">Rubik</option>
+                        <option value="Quicksand">Quicksand</option>
+                        <option value="Karla">Karla</option>
+                        <option value="Libre Franklin">Libre Franklin</option>
+                        <option value="Libre Baskerville">Libre Baskerville</option>
+                        <option value="Lora">Lora</option>
+                        <option value="Space Grotesk">Space Grotesk</option>
                         <option value="Roboto">Roboto</option>
                         <option value="Open Sans">Open Sans</option>
                         <option value="Lato">Lato</option>
@@ -3505,10 +3525,19 @@ function getPrimaryFontFamily(fontFamily) {
     return primary.replace(/^['"]|['"]$/g, '');
 }
 
+function applyFontFamilyToAll(editor, fontFamily) {
+    if (!editor) return;
+    editor.style.fontFamily = fontFamily;
+    editor.querySelectorAll('*').forEach((node) => {
+        node.style.fontFamily = fontFamily;
+    });
+}
+
 function applyFontFamily(editor, fontFamily) {
     const selection = window.getSelection();
     const primaryFont = getPrimaryFontFamily(fontFamily);
     if (!selection || selection.rangeCount === 0) {
+        applyFontFamilyToAll(editor, fontFamily);
         editor.focus();
         document.execCommand('styleWithCSS', false, true);
         document.execCommand('fontName', false, primaryFont || fontFamily);
@@ -3520,12 +3549,14 @@ function applyFontFamily(editor, fontFamily) {
             ? range
             : savedRteSelection;
     if (!activeRange) {
+        applyFontFamilyToAll(editor, fontFamily);
         editor.focus();
         document.execCommand('styleWithCSS', false, true);
         document.execCommand('fontName', false, primaryFont || fontFamily);
         return;
     }
     if (activeRange.collapsed) {
+        applyFontFamilyToAll(editor, fontFamily);
         editor.focus();
         document.execCommand('styleWithCSS', false, true);
         document.execCommand('fontName', false, primaryFont || fontFamily);
