@@ -1034,6 +1034,92 @@ router.get('/api/marketing/intelligent', requireAdminOrOrganiser, async (req, re
   res.json(response);
 });
 
+router.get('/api/marketing/intelligent/report', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const daysRaw = Number(req.query?.days || 30);
+  const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(365, Math.floor(daysRaw)) : 30;
+  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const events = await prisma.marketingEmailEvent.findMany({
+    where: {
+      tenantId,
+      createdAt: { gte: from },
+      type: {
+        in: [
+          MarketingEmailEventType.DELIVERED,
+          MarketingEmailEventType.OPEN,
+          MarketingEmailEventType.CLICK,
+          MarketingEmailEventType.BOUNCE,
+          MarketingEmailEventType.UNSUBSCRIBE,
+        ],
+      },
+      campaign: { name: { startsWith: 'IC:' } },
+    },
+    select: {
+      type: true,
+      email: true,
+      campaignId: true,
+    },
+  });
+
+  const campaignIds = Array.from(new Set(events.map((event) => event.campaignId)));
+  const snapshots = campaignIds.length
+    ? await prisma.marketingSendSnapshot.findMany({
+        where: {
+          tenantId,
+          campaignId: { in: campaignIds },
+        },
+        select: {
+          campaignId: true,
+          recipientEmail: true,
+          mergeContext: true,
+        },
+      })
+    : [];
+
+  const snapshotKindMap = new Map<string, string>();
+  for (const snapshot of snapshots) {
+    const mergeContext = snapshot.mergeContext;
+    if (!mergeContext || typeof mergeContext !== 'object' || Array.isArray(mergeContext)) continue;
+    const meta = (mergeContext as Record<string, any>).meta;
+    const kind = meta && typeof meta === 'object' && !Array.isArray(meta) ? meta.kind : null;
+    if (typeof kind !== 'string' || !kind) continue;
+    const key = `${snapshot.campaignId}:${normaliseEmail(snapshot.recipientEmail)}`;
+    if (!snapshotKindMap.has(key)) {
+      snapshotKindMap.set(key, kind);
+    }
+  }
+
+  const totals = new Map<
+    string,
+    { sent: number; opened: number; clicked: number; bounced: number; unsubscribed: number }
+  >();
+  for (const event of events) {
+    const key = `${event.campaignId}:${normaliseEmail(event.email)}`;
+    const kind = snapshotKindMap.get(key);
+    if (!kind) continue;
+    const stats =
+      totals.get(kind) || { sent: 0, opened: 0, clicked: 0, bounced: 0, unsubscribed: 0 };
+    if (event.type === MarketingEmailEventType.DELIVERED) stats.sent += 1;
+    if (event.type === MarketingEmailEventType.OPEN) stats.opened += 1;
+    if (event.type === MarketingEmailEventType.CLICK) stats.clicked += 1;
+    if (event.type === MarketingEmailEventType.BOUNCE) stats.bounced += 1;
+    if (event.type === MarketingEmailEventType.UNSUBSCRIBE) stats.unsubscribed += 1;
+    totals.set(kind, stats);
+  }
+
+  const response = {
+    ok: true,
+    days,
+    items: Array.from(totals.entries()).map(([kind, stats]) => ({
+      kind,
+      ...stats,
+    })),
+  };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
 router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   const rawKind = String(req.params.kind || '').trim().toUpperCase();
@@ -1259,7 +1345,11 @@ router.post('/api/marketing/intelligent/:kind/preview', requireAdminOrOrganiser,
     reasons.add(suppressionDecision.reason);
   }
 
-  const sendCap = await countIntelligentSendsLast30d(tenantId, email);
+  const sendCap = await countIntelligentSendsLast30d(
+    tenantId,
+    email,
+    configOptions.maxEmailsPer30DaysPerContact
+  );
   sendCap.reasons.forEach((reason) => reasons.add(reason));
 
   const topShowId = recommendedShows[0]?.showId;

@@ -28,7 +28,11 @@ import { renderCompiledTemplate } from './template-compiler.js';
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import { createPreferencesToken } from '../../lib/email-marketing/preferences.js';
 import { createUnsubscribeToken } from '../../lib/email-marketing/unsubscribe.js';
-import { countIntelligentSendsLast30d, hasEmailedShowRecently } from './intelligent/eligibility.js';
+import {
+  countIntelligentSendsLast30d,
+  hasEmailedShowRecently,
+  resolveIntelligentSendCap,
+} from './intelligent/eligibility.js';
 import { buildContactPurchaseSignals } from './intelligent/recommendations.js';
 import { hasPurchasedShow } from './intelligent/suppression.js';
 import { shouldSuppressContact } from './campaigns.js';
@@ -152,6 +156,7 @@ async function processAlmostSoldOutIntelligentCampaigns() {
     if (!tenant) continue;
 
     const { threshold, cooldownDays, horizonDays } = resolveAlmostSoldOutConfig(config.configJson);
+    const maxEmailsPer30DaysPerContact = resolveIntelligentSendCap(config.configJson);
     const upcomingShows = await fetchUpcomingLiveShows(config.tenantId, horizonDays);
     if (!upcomingShows.length) continue;
 
@@ -241,7 +246,11 @@ async function processAlmostSoldOutIntelligentCampaigns() {
         const purchased = await hasPurchasedShow(config.tenantId, email, show.id);
         if (purchased) continue;
 
-        const sendCap = await countIntelligentSendsLast30d(config.tenantId, email);
+        const sendCap = await countIntelligentSendsLast30d(
+          config.tenantId,
+          email,
+          maxEmailsPer30DaysPerContact
+        );
         sendCap.reasons.forEach((reason) => reasons.add(reason));
 
         const recentEligibility = await hasEmailedShowRecently(config.tenantId, email, show.id, cooldownDays);
@@ -408,6 +417,7 @@ async function processAddonUpsellIntelligentCampaigns() {
     }
 
     const { lookbackDays, cooldownDays } = resolveAddonUpsellConfig(config.configJson);
+    const maxEmailsPer30DaysPerContact = resolveIntelligentSendCap(config.configJson);
     const lookbackMs = Math.max(0, Number(lookbackDays) || 0) * 24 * 60 * 60 * 1000;
     const lookbackDate = new Date(runAt.getTime() - lookbackMs);
 
@@ -603,7 +613,11 @@ async function processAddonUpsellIntelligentCampaigns() {
         }
         if (suppressionDecision.suppressed) continue;
 
-        const sendCap = await countIntelligentSendsLast30d(config.tenantId, email);
+        const sendCap = await countIntelligentSendsLast30d(
+          config.tenantId,
+          email,
+          maxEmailsPer30DaysPerContact
+        );
         sendCap.reasons.forEach((reason) => reasons.add(reason));
 
         const recentEligibility = await hasEmailedShowRecently(config.tenantId, email, showId, cooldownDays);
