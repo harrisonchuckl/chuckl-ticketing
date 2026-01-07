@@ -2242,11 +2242,11 @@ canvas.addEventListener('drop', (e) => {
 
     // Logic for nesting
     if (dropContainer.classList.contains('ms-strip-inner')) {
-        const stripId = dropContainer.closest('.ms-builder-block').dataset.id;
-        const stripBlock = window.editorBlocks.find(b => b.id === stripId);
-        if (stripBlock) {
-            stripBlock.content.blocks = stripBlock.content.blocks || [];
-            stripBlock.content.blocks.splice(dropIndex, 0, blockData);
+        const stripId = dropContainer.closest('.ms-builder-block')?.dataset.id;
+        const stripResult = stripId ? findBlockById(stripId) : null;
+        if (stripResult?.block) {
+            stripResult.block.content.blocks = stripResult.block.content.blocks || [];
+            stripResult.block.content.blocks.splice(dropIndex, 0, blockData);
         }
     } else {
         window.editorBlocks.splice(dropIndex, 0, blockData);
@@ -2420,9 +2420,12 @@ function createBlockElement(block, index, parentArray) {
 
     const el = document.createElement('div');
     el.className = 'ms-builder-block';
+    el.setAttribute('draggable', 'true');
+    el.dataset.id = block.id;
     
     // --- STRIP SPECIAL HANDLING ---
     if (block.type === 'strip') {
+        el.classList.add('is-strip');
         // Get styles with defaults
         const pad = block.content.padding !== undefined ? block.content.padding : '20px';
         const radius = block.content.borderRadius !== undefined ? block.content.borderRadius : '0';
