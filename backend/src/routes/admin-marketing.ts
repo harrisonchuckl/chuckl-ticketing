@@ -23,6 +23,7 @@ import {
   MarketingPreferenceStatus,
   MarketingSuppressionType,
   MarketingImportJobStatus,
+  MarketingIntelligentCampaignKind,
   MarketingCampaignRecipient,
   MarketingRecipientStatus,
   MarketingSenderMode,
@@ -1014,6 +1015,107 @@ router.get('/api/marketing/status', requireAdminOrOrganiser, async (req, res) =>
     verifiedStatus: settings?.verifiedStatus || MarketingVerifiedStatus.UNVERIFIED,
     sendingMode: settings?.sendingMode || MarketingSenderMode.SENDGRID,
   });
+});
+
+router.get('/api/marketing/intelligent', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const items = await prisma.marketingIntelligentCampaign.findMany({
+    where: { tenantId },
+    orderBy: { updatedAt: 'desc' },
+    select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+  });
+  const response = { ok: true, items };
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const rawKind = String(req.params.kind || '').trim().toUpperCase();
+  const kind = Object.values(MarketingIntelligentCampaignKind).includes(rawKind as MarketingIntelligentCampaignKind)
+    ? (rawKind as MarketingIntelligentCampaignKind)
+    : null;
+  if (!kind) {
+    const response = { ok: false, message: 'Invalid intelligent campaign kind.' };
+    logMarketingApi(req, response);
+    return res.status(400).json(response);
+  }
+
+  const payload = req.body || {};
+  const templateId = hasOwn(payload, 'templateId') ? String(payload.templateId || '').trim() : undefined;
+  const enabled = hasOwn(payload, 'enabled') ? Boolean(payload.enabled) : undefined;
+  const configJson = hasOwn(payload, 'configJson') ? payload.configJson : undefined;
+  const lastRunAtRaw = hasOwn(payload, 'lastRunAt') ? payload.lastRunAt : undefined;
+  const lastRunAt =
+    lastRunAtRaw === undefined || lastRunAtRaw === null || lastRunAtRaw === ''
+      ? lastRunAtRaw === undefined
+        ? undefined
+        : null
+      : new Date(lastRunAtRaw);
+
+  if (lastRunAt instanceof Date && Number.isNaN(lastRunAt.getTime())) {
+    const response = { ok: false, message: 'Invalid lastRunAt timestamp.' };
+    logMarketingApi(req, response);
+    return res.status(400).json(response);
+  }
+
+  const existing = await prisma.marketingIntelligentCampaign.findFirst({
+    where: { tenantId, kind },
+    select: { id: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+  });
+
+  if (!existing && (!templateId || configJson === undefined)) {
+    const response = { ok: false, message: 'templateId and configJson are required to create config.' };
+    logMarketingApi(req, response);
+    return res.status(400).json(response);
+  }
+
+  const updateData: {
+    templateId?: string;
+    enabled?: boolean;
+    configJson?: Prisma.JsonValue;
+    lastRunAt?: Date | null;
+  } = {};
+  if (templateId !== undefined) updateData.templateId = templateId;
+  if (enabled !== undefined) updateData.enabled = enabled;
+  if (configJson !== undefined) updateData.configJson = configJson;
+  if (lastRunAt !== undefined) updateData.lastRunAt = lastRunAt;
+
+  let record = existing;
+  if (!existing) {
+    record = await prisma.marketingIntelligentCampaign.create({
+      data: {
+        tenantId,
+        kind,
+        templateId: templateId as string,
+        configJson: configJson as Prisma.JsonValue,
+        enabled: enabled ?? true,
+        lastRunAt: lastRunAt ?? null,
+      },
+      select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+    });
+  } else if (Object.keys(updateData).length) {
+    record = await prisma.marketingIntelligentCampaign.update({
+      where: { id: existing.id },
+      data: updateData,
+      select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+    });
+  } else {
+    record = { kind, ...existing };
+  }
+
+  const response = {
+    ok: true,
+    config: {
+      kind: record?.kind ?? kind,
+      configJson: record?.configJson ?? existing?.configJson ?? null,
+      enabled: record?.enabled ?? existing?.enabled ?? true,
+      templateId: record?.templateId ?? existing?.templateId ?? '',
+      lastRunAt: record?.lastRunAt ?? existing?.lastRunAt ?? null,
+    },
+  };
+  logMarketingApi(req, response);
+  res.json(response);
 });
 
 router.post('/api/marketing/settings', requireAdminOrOrganiser, async (req, res) => {
