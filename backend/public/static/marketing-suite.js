@@ -2024,18 +2024,52 @@ window.addEventListener('unhandledrejection', (event) => {
 renderRoute();
 
 /* GLOBAL BUILDER HELPERS */
+function generateBlockId() {
+    return `blk_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+}
+
+function findBlockById(id, blocks = window.editorBlocks) {
+    for (let index = 0; index < blocks.length; index += 1) {
+        const block = blocks[index];
+        if (block.id === id) return { block, index, parent: blocks };
+        if (block.type === 'strip' && block.content?.blocks) {
+            const result = findBlockById(id, block.content.blocks);
+            if (result) return result;
+        }
+    }
+    return null;
+}
+
+function assignNewIds(block) {
+    block.id = generateBlockId();
+    if (block.type === 'strip' && block.content?.blocks) {
+        block.content.blocks.forEach(assignNewIds);
+    }
+}
+
 window.duplicateBlock = function(index) {
     const original = window.editorBlocks[index];
+    if (!original) return;
     const copy = JSON.parse(JSON.stringify(original));
-    copy.id = 'blk_' + Date.now();
+    assignNewIds(copy);
     window.editorBlocks.splice(index + 1, 0, copy);
     renderBuilderCanvas();
     toast('Block duplicated');
 };
 
+window.duplicateBlockById = function(id) {
+    const result = findBlockById(id);
+    if (!result) return;
+    const copy = JSON.parse(JSON.stringify(result.block));
+    assignNewIds(copy);
+    result.parent.splice(result.index + 1, 0, copy);
+    renderBuilderCanvas();
+    toast('Block duplicated');
+};
+
 window.openEditorFromIcon = function(id) {
-    const block = window.editorBlocks.find(b => b.id === id);
-    if (block) openBlockEditor(block);
+    const result = findBlockById(id);
+    if (result?.block) openBlockEditor(result.block);
 };
 
 
@@ -2164,10 +2198,10 @@ canvas.addEventListener('drop', (e) => {
     let blockData;
     if (isFromSidebar) {
         blockData = {
-            id: 'blk_' + Date.now(),
+            id: generateBlockId(),
             type: type,
             content: getDefaultBlockContent(type),
-            styles: { padding: '10px' }
+            styles: { padding: '10px', margin: '0px' }
         };
     } else {
         const draggedBlockId = e.dataTransfer.getData('blockId');
@@ -2233,10 +2267,10 @@ function getDragAfterElement(container, y) {
  */
 function addBlockToCanvas(type, index) {
     const newBlock = {
-        id: 'blk_' + Date.now(),
+        id: generateBlockId(),
         type: type,
         content: getDefaultBlockContent(type),
-        styles: { padding: '10px' }
+        styles: { padding: '10px', margin: '0px' }
     };
 
     // If index is invalid or -1 (end of list), push to end
@@ -2287,7 +2321,7 @@ function getDefaultBlockContent(type) {
     const placeholderSmall = getPlaceholderImage(300, 200);
     
     switch (type) {
-        case 'strip': return { bgColor: '#ffffff', blocks: [] };
+        case 'strip': return { bgColor: '#ffffff', blocks: [], fullWidth: false, padding: '20px' };
         case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
         case 'image': return { src: placeholderLarge, alt: 'Image', link: '' };
@@ -2328,6 +2362,7 @@ function renderBuilderCanvas() {
 function createBlockElement(block, index, parentArray) {
     const iconEdit = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
     const iconTrash = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+    const iconDuplicate = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
 
     const el = document.createElement('div');
     el.className = 'ms-builder-block';
@@ -2336,15 +2371,23 @@ function createBlockElement(block, index, parentArray) {
     }
     el.dataset.id = block.id;
     el.draggable = true;
-    el.style.padding = block.styles?.padding || '10px';
+    if (block.type === 'strip') {
+        const fullWidth = Boolean(block.content?.fullWidth);
+        el.style.padding = fullWidth ? '0px' : block.styles?.padding || '10px';
+        el.style.margin = fullWidth ? '0px' : block.styles?.margin || '0px';
+    } else {
+        el.style.padding = block.styles?.padding || '10px';
+    }
     
     // --- STRIP SPECIAL HANDLING ---
     if (block.type === 'strip') {
         el.innerHTML = `
-            <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'};">
+            <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${block.content.padding || '20px'};">
                 <div class="ms-strip-inner"></div>
             </div>
             <div class="block-actions">
+                <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
+                <span title="Duplicate" onclick="window.duplicateBlockById('${block.id}')">${iconDuplicate}</span>
                 <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
             </div>
         `;
@@ -2361,6 +2404,7 @@ function createBlockElement(block, index, parentArray) {
             ${getPreviewHtml(block)}
             <div class="block-actions">
                 <span title="Edit" onclick="window.openEditorFromIcon('${block.id}')">${iconEdit}</span>
+                <span title="Duplicate" onclick="window.duplicateBlockById('${block.id}')">${iconDuplicate}</span>
                 <span title="Delete" onclick="window.deleteBlock('${block.id}')">${iconTrash}</span>
             </div>
         `;
@@ -2471,7 +2515,60 @@ function openBlockEditor(block) {
     const container = document.getElementById('ms-active-block-settings');
     container.innerHTML = '';
 
-    if (block.type === 'text') {
+    if (block.type === 'strip') {
+        const currentPadding = block.content?.padding || '20px';
+        const currentOuterPadding = block.styles?.padding || '10px';
+        const currentOuterMargin = block.styles?.margin || '0px';
+        container.innerHTML = `
+            <div class="ms-field">
+                <label>Background Color</label>
+                <input type="color" id="edit-strip-bg" value="${block.content.bgColor || '#ffffff'}">
+            </div>
+            <div class="ms-field">
+                <label><input type="checkbox" id="edit-strip-fullwidth" ${block.content.fullWidth ? 'checked' : ''}> Full width</label>
+                <div class="ms-muted">Full width removes outer spacing so the strip reaches the email edge.</div>
+            </div>
+            <div class="ms-field">
+                <label>Strip padding (px)</label>
+                <input type="number" min="0" id="edit-strip-padding" value="${parseInt(currentPadding, 10) || 0}">
+            </div>
+            <div class="ms-field">
+                <label>Outer padding (px)</label>
+                <input type="number" min="0" id="edit-strip-outer-padding" value="${parseInt(currentOuterPadding, 10) || 0}">
+            </div>
+            <div class="ms-field">
+                <label>Outer margin (px)</label>
+                <input type="number" min="0" id="edit-strip-outer-margin" value="${parseInt(currentOuterMargin, 10) || 0}">
+            </div>
+        `;
+
+        const bgInput = container.querySelector('#edit-strip-bg');
+        const fullWidthInput = container.querySelector('#edit-strip-fullwidth');
+        const paddingInput = container.querySelector('#edit-strip-padding');
+        const outerPaddingInput = container.querySelector('#edit-strip-outer-padding');
+        const outerMarginInput = container.querySelector('#edit-strip-outer-margin');
+
+        const syncStripStyles = () => {
+            block.content.bgColor = bgInput.value;
+            block.content.fullWidth = fullWidthInput.checked;
+            block.content.padding = `${Number(paddingInput.value || 0)}px`;
+            block.styles = block.styles || {};
+            if (block.content.fullWidth) {
+                block.styles.padding = '0px';
+                block.styles.margin = '0px';
+            } else {
+                block.styles.padding = `${Number(outerPaddingInput.value || 0)}px`;
+                block.styles.margin = `${Number(outerMarginInput.value || 0)}px`;
+            }
+            renderBuilderCanvas();
+        };
+
+        [bgInput, fullWidthInput, paddingInput, outerPaddingInput, outerMarginInput].forEach((input) => {
+            input.addEventListener('input', syncStripStyles);
+            input.addEventListener('change', syncStripStyles);
+        });
+    }
+    else if (block.type === 'text') {
         container.innerHTML = `
             <div class="ms-field">
                 <label>Content (HTML allowed)</label>
