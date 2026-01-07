@@ -6,6 +6,7 @@ export type MarketingTemplateVariables = {
   unsubscribeUrl?: string | null;
   preferencesUrl?: string | null;
   recommendedShows?: string | null;
+  recommendedAddonsHtml?: string | null;
   showTitle?: string | null;
   showDate?: string | null;
   showVenue?: string | null;
@@ -43,10 +44,15 @@ export function ensureUnsubscribeFooter(html: string, unsubscribeUrl: string, pr
   return `${html}${footer}`;
 }
 
-export function ensureRecommendationsBlock(html: string, recommendedShows?: string | null): string {
-  if (!recommendedShows) return html;
-  if (html.includes(recommendedShows)) return html;
-  return `${html}${recommendedShows}`;
+export function ensureRecommendationsBlock(html: string, recommendedShows?: string | null, recommendedAddons?: string | null): string {
+  let output = html;
+  if (recommendedShows && !output.includes(recommendedShows)) {
+    output = `${output}${recommendedShows}`;
+  }
+  if (recommendedAddons && !output.includes(recommendedAddons)) {
+    output = `${output}${recommendedAddons}`;
+  }
+  return output;
 }
 
 export function ensureShowBlock(html: string, variables: MarketingTemplateVariables): string {
@@ -76,7 +82,7 @@ export function renderMarketingTemplate(
   let html = compiled.html;
   html = interpolateTemplate(html, variables);
 
-  html = ensureRecommendationsBlock(html, variables.recommendedShows);
+  html = ensureRecommendationsBlock(html, variables.recommendedShows, variables.recommendedAddonsHtml);
   html = ensureShowBlock(html, variables);
 
   if (variables.unsubscribeUrl) {

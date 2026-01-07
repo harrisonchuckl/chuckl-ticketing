@@ -83,6 +83,7 @@ export function renderCompiledTemplate(options: {
   unsubscribeUrl?: string | null;
   preferencesUrl?: string | null;
   recommendedShows?: string | null;
+  recommendedAddonsHtml?: string | null;
   showContext?: {
     showTitle?: string | null;
     showDate?: string | null;
@@ -94,7 +95,7 @@ export function renderCompiledTemplate(options: {
 }): string {
   const merged = renderMergeTags(options.compiledHtml, options.mergeContext);
   let html = merged;
-  html = ensureRecommendationsBlock(html, options.recommendedShows || null);
+  html = ensureRecommendationsBlock(html, options.recommendedShows || null, options.recommendedAddonsHtml || null);
   html = ensureShowBlock(html, {
     showTitle: options.showContext?.showTitle || '',
     showDate: options.showContext?.showDate || '',
