@@ -1121,11 +1121,14 @@ window.updateBlockProp = function(prop, value) {
     }
 };
     
-    window.updateActiveBlockBg = function(color) {
+window.updateActiveBlockBg = function(color) {
     if (window.activeBlockId) {
         const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
         if (block && block.content) {
             block.content.bgColor = color;
+            if (block.type === 'strip') {
+                block.content.gradient = null;
+            }
             block.content.isTransparent = false;
             const transparentToggle = document.getElementById('input-strip-transparent');
             if (transparentToggle && transparentToggle.checked) {
@@ -1135,6 +1138,68 @@ window.updateBlockProp = function(prop, value) {
             renderBuilderCanvas(); // Re-render to show change
         }
     }
+};
+
+function getActiveStripBlock() {
+    if (!window.activeBlockId) return null;
+    const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+    if (!block || block.type !== 'strip') return null;
+    return block;
+}
+
+window.updateStripTransparency = function(isTransparent) {
+    const block = getActiveStripBlock();
+    if (!block || !block.content) return;
+    block.content.isTransparent = isTransparent;
+    if (isTransparent) {
+        block.content.gradient = null;
+    }
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
+};
+
+window.updateActiveStripGradient = function(gradient, payload = {}) {
+    const block = getActiveStripBlock();
+    if (!block || !block.content) return;
+    block.content.gradient = {
+        css: gradient,
+        ...payload,
+    };
+    block.content.isTransparent = false;
+    const transparentToggle = document.getElementById('input-strip-transparent');
+    if (transparentToggle && transparentToggle.checked) {
+        transparentToggle.checked = false;
+    }
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
+};
+
+window.updateStripGradientStart = function(color) {
+    window.currentStripGradientStart = color;
+    const gradient = getGradientCss(
+        window.currentStripGradientDirection || 'to bottom',
+        window.currentStripGradientStart || '#111827',
+        window.currentStripGradientEnd || '#f9fafb'
+    );
+    window.updateActiveStripGradient(gradient, {
+        start: window.currentStripGradientStart,
+        end: window.currentStripGradientEnd || '#f9fafb',
+        direction: window.currentStripGradientDirection || 'to bottom',
+    });
+};
+
+window.updateStripGradientEnd = function(color) {
+    window.currentStripGradientEnd = color;
+    const gradient = getGradientCss(
+        window.currentStripGradientDirection || 'to bottom',
+        window.currentStripGradientStart || '#111827',
+        window.currentStripGradientEnd || '#f9fafb'
+    );
+    window.updateActiveStripGradient(gradient, {
+        start: window.currentStripGradientStart || '#111827',
+        end: window.currentStripGradientEnd,
+        direction: window.currentStripGradientDirection || 'to bottom',
+    });
 };
 
 window.updateActiveBlockColor = function(color) {
@@ -2631,6 +2696,7 @@ function getDefaultBlockContent(type) {
     switch (type) {
 case 'strip': return { 
     bgColor: '#ffffff', 
+    gradient: null,
     isTransparent: false,
     blocks: [], 
     fullWidth: false,   // Kept your existing setting
@@ -2917,6 +2983,7 @@ function createBlockElement(block, index, parentArray) {
             el.classList.add('is-fullwidth');
         }
         const isTransparent = Boolean(block.content.isTransparent);
+        const gradientData = block.content.gradient || null;
         // Get styles with defaults
         const padValue = Number.parseInt(block.content.padding, 10);
         const radiusValue = Number.parseInt(block.content.borderRadius, 10);
@@ -2924,10 +2991,14 @@ function createBlockElement(block, index, parentArray) {
         const pad = Number.isFinite(padValue) ? padValue : 20;
         const radius = Number.isFinite(radiusValue) ? radiusValue : 0;
         const margin = Number.isFinite(marginValue) ? Math.max(marginValue, 0) : 0;
+        const backgroundColor = isTransparent
+            ? 'transparent'
+            : (gradientData?.start || block.content.bgColor || '#ffffff');
+        const backgroundImage = !isTransparent && gradientData?.css ? gradientData.css : 'none';
         
         el.innerHTML = `
         <div class="ms-strip-wrapper" style="padding: 0 ${margin}px;">
-            <div class="ms-strip${isTransparent ? ' is-transparent' : ''}" style="background-color: ${isTransparent ? 'transparent' : block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
+            <div class="ms-strip${isTransparent ? ' is-transparent' : ''}" style="background-color: ${backgroundColor}; background-image: ${backgroundImage}; padding: ${pad}px; border-radius: ${radius}px;">
                 <div class="ms-strip-inner"></div>
             </div>
         </div>
@@ -3131,18 +3202,41 @@ function openBlockEditor(block) {
 
     // --- STRIP EDITOR (Corrected & Merged) ---
     if (block.type === 'strip') {
+        const stripGradient = block.content.gradient || {};
+        const stripGradientStart = stripGradient.start || '#111827';
+        const stripGradientEnd = stripGradient.end || '#f9fafb';
         container.innerHTML = `
             <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
                 <div style="font-size:12px; font-weight:600; color:#64748b; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Strip Settings</div>
                 
                 ${renderModernColorPicker('Background Color', 'strip-bg', block.content.bgColor || '#ffffff', 'updateActiveBlockBg')}
+
+                <div class="ms-field" style="margin-top:12px;">
+                    <label>Gradient presets</label>
+                    <div class="ms-gradient-grid" id="ms-strip-gradient-presets"></div>
+                </div>
+                <div class="ms-gradient-custom">
+                    <div class="ms-sidebar-section-title">Custom gradient</div>
+                    <div class="ms-gradient-picker">
+                        ${renderModernColorPicker('Start color', 'strip-gradient-start', stripGradientStart, 'updateStripGradientStart')}
+                        ${renderModernColorPicker('End color', 'strip-gradient-end', stripGradientEnd, 'updateStripGradientEnd')}
+                    </div>
+                    <div class="ms-field" style="margin-top:12px;">
+                        <label>Gradient direction</label>
+                        <select id="ms-strip-gradient-direction">
+                            <option value="to bottom">Vertical</option>
+                            <option value="to right">Horizontal</option>
+                            <option value="135deg">Diagonal</option>
+                        </select>
+                    </div>
+                </div>
                 
                 <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:12px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
                     <input type="checkbox" id="input-fullWidth" ${block.content.fullWidth ? 'checked' : ''} onchange="window.updateBlockProp('fullWidth', this.checked)" style="width:auto; margin:0;">
                     <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full Width Background</label>
                 </div>
                 <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:10px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
-                    <input type="checkbox" id="input-strip-transparent" ${block.content.isTransparent ? 'checked' : ''} onchange="window.updateBlockProp('isTransparent', this.checked)" style="width:auto; margin:0;">
+                    <input type="checkbox" id="input-strip-transparent" ${block.content.isTransparent ? 'checked' : ''} onchange="window.updateStripTransparency(this.checked)" style="width:auto; margin:0;">
                     <label style="margin:0; font-size:13px; cursor:pointer;" for="input-strip-transparent">Transparent background</label>
                 </div>
 
@@ -3166,6 +3260,7 @@ function openBlockEditor(block) {
                 </div>
             </div>
         `;
+        setupStripGradientControls(block);
     }
     else if (block.type === 'divider') {
         const paddingTop = Number.isFinite(Number.parseInt(block.content.paddingTop, 10))
@@ -3782,6 +3877,69 @@ function openBlockEditor(block) {
     }
     else {
         container.innerHTML = `<div class="ms-muted">No settings available for this block type yet.</div>`;
+    }
+}
+
+function setupStripGradientControls(block) {
+    const directionSelect = document.getElementById('ms-strip-gradient-direction');
+    const gradientPresets = document.getElementById('ms-strip-gradient-presets');
+    const gradientData = block.content.gradient || {};
+
+    window.currentStripGradientStart = gradientData.start || '#111827';
+    window.currentStripGradientEnd = gradientData.end || '#f9fafb';
+    window.currentStripGradientDirection = gradientData.direction || 'to bottom';
+
+    if (directionSelect) {
+        directionSelect.value = window.currentStripGradientDirection;
+        directionSelect.addEventListener('change', (event) => {
+            window.currentStripGradientDirection = event.target.value;
+            const gradient = getGradientCss(
+                window.currentStripGradientDirection,
+                window.currentStripGradientStart || '#111827',
+                window.currentStripGradientEnd || '#f9fafb'
+            );
+            window.updateActiveStripGradient(gradient, {
+                start: window.currentStripGradientStart || '#111827',
+                end: window.currentStripGradientEnd || '#f9fafb',
+                direction: window.currentStripGradientDirection,
+            });
+        });
+    }
+
+    if (gradientPresets) {
+        gradientPresets.innerHTML = GRADIENT_PRESETS.map((preset, index) => {
+            const gradient = getGradientCss(preset.direction, preset.start, preset.end);
+            return `
+                <button class="ms-gradient-swatch" type="button" data-strip-gradient-index="${index}" style="background:${gradient}">
+                    <span>${preset.name}</span>
+                </button>
+            `;
+        }).join('');
+        gradientPresets.querySelectorAll('[data-strip-gradient-index]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const index = Number.parseInt(button.dataset.stripGradientIndex, 10);
+                const preset = GRADIENT_PRESETS[index];
+                if (!preset) return;
+                window.currentStripGradientStart = preset.start;
+                window.currentStripGradientEnd = preset.end;
+                window.currentStripGradientDirection = preset.direction;
+                const gradient = getGradientCss(preset.direction, preset.start, preset.end);
+                window.updateActiveStripGradient(gradient, {
+                    start: preset.start,
+                    end: preset.end,
+                    direction: preset.direction,
+                });
+                const startInput = document.getElementById('input-strip-gradient-start');
+                const endInput = document.getElementById('input-strip-gradient-end');
+                const startPreview = document.getElementById('preview-strip-gradient-start');
+                const endPreview = document.getElementById('preview-strip-gradient-end');
+                if (startInput) startInput.value = preset.start;
+                if (endInput) endInput.value = preset.end;
+                if (startPreview) startPreview.style.backgroundColor = preset.start;
+                if (endPreview) endPreview.style.backgroundColor = preset.end;
+                if (directionSelect) directionSelect.value = preset.direction;
+            });
+        });
     }
 }
 
