@@ -383,6 +383,15 @@ body {
 .ms-color-swatch {
     width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.05); transition: transform 0.1s;
 }
+.ms-color-swatch-button {
+  padding: 0;
+  background: transparent;
+  display: inline-block;
+}
+.ms-color-swatch-button:focus-visible {
+  outline: 2px solid rgba(79, 70, 229, 0.4);
+  outline-offset: 2px;
+}
 .ms-color-swatch:hover { transform: scale(1.1); z-index: 1; border-color: #cbd5e1; }
 
 .ms-sidebar-section-title {
@@ -438,6 +447,10 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.ms-palette-grid-inline {
+  margin-top: 8px;
 }
 
 /* 8. UI UTILITIES */
