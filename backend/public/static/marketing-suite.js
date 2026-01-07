@@ -3133,8 +3133,24 @@ function openBlockEditor(block) {
                         <option value="32">32px</option>
                     </select>
                     <div class="ms-rte-line-spacing" role="group" aria-label="Line spacing">
-                        <button class="ms-rte-btn" type="button" data-rte-command="lineHeightDecrease" title="Decrease line spacing">A-</button>
-                        <button class="ms-rte-btn" type="button" data-rte-command="lineHeightIncrease" title="Increase line spacing">A+</button>
+                        <button class="ms-rte-btn ms-rte-line-spacing-trigger" type="button" data-rte-command="lineSpacing" aria-expanded="false">
+                            Line spacing
+                        </button>
+                        <div class="ms-rte-line-spacing-popover" data-line-spacing-popover>
+                            <div class="ms-rte-line-spacing-header">
+                                <span>Line spacing</span>
+                                <span class="ms-rte-line-spacing-value" data-line-spacing-value>1.50x</span>
+                            </div>
+                            <input
+                                class="ms-rte-line-spacing-range"
+                                type="range"
+                                min="1"
+                                max="3"
+                                step="0.05"
+                                value="1.5"
+                                data-line-spacing-range
+                            />
+                        </div>
                     </div>
                 </div>
                 <div id="ms-text-editor" class="ms-rte-editor" contenteditable="true">${block.content.text || ''}</div>
@@ -3216,16 +3232,68 @@ function openBlockEditor(block) {
             recordEditorHistory({ immediate: false });
             renderBuilderCanvas();
         });
+        const lineSpacingWrapper = container.querySelector('.ms-rte-line-spacing');
+        const lineSpacingButton = container.querySelector('[data-rte-command="lineSpacing"]');
+        const lineSpacingPopover = container.querySelector('[data-line-spacing-popover]');
+        const lineSpacingRange = container.querySelector('[data-line-spacing-range]');
+        const lineSpacingValue = container.querySelector('[data-line-spacing-value]');
+        const updateLineSpacingValue = (ratio) => {
+            const safeRatio = Math.min(3, Math.max(1, Number.parseFloat(ratio) || 1.5));
+            if (lineSpacingRange) lineSpacingRange.value = safeRatio;
+            if (lineSpacingValue) lineSpacingValue.textContent = `${safeRatio.toFixed(2)}x`;
+        };
+        const setLineSpacingOpen = (open) => {
+            if (!lineSpacingWrapper || !lineSpacingButton || !lineSpacingPopover) return;
+            lineSpacingWrapper.classList.toggle('is-open', open);
+            lineSpacingButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) {
+                const ratio = getLineHeightRatioFromSelection(editor);
+                updateLineSpacingValue(ratio);
+            }
+        };
+        if (lineSpacingButton) {
+            lineSpacingButton.addEventListener('click', () => {
+                saveSelection();
+                const isOpen = lineSpacingWrapper?.classList.contains('is-open');
+                setLineSpacingOpen(!isOpen);
+            });
+        }
+        if (lineSpacingRange) {
+            lineSpacingRange.addEventListener('input', () => {
+                restoreRteSelection(editor);
+                const ratio = Number.parseFloat(lineSpacingRange.value);
+                applyLineHeightRatio(editor, ratio);
+                updateLineSpacingValue(ratio);
+                block.content.text = editor.innerHTML;
+                recordEditorHistory({ immediate: false });
+                renderBuilderCanvas();
+                saveSelection();
+            });
+            lineSpacingRange.addEventListener('change', () => {
+                recordEditorHistory();
+            });
+        }
+        const handleLineSpacingOutsideClick = (event) => {
+            if (!lineSpacingWrapper) return;
+            if (!lineSpacingWrapper.contains(event.target)) {
+                setLineSpacingOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleLineSpacingOutsideClick);
+        const previousCleanup = rteCleanupHandler;
+        rteCleanupHandler = () => {
+            if (typeof previousCleanup === 'function') previousCleanup();
+            document.removeEventListener('mousedown', handleLineSpacingOutsideClick);
+            window.activeTextEditor = null;
+        };
         container.querySelectorAll('button[data-rte-command]').forEach((button) => {
             button.addEventListener('click', () => {
                 const command = button.getAttribute('data-rte-command');
+                if (command === 'lineSpacing') return;
                 restoreRteSelection(editor);
                 if (command === 'createLink') {
                     const url = prompt('Enter a URL');
                     if (url) document.execCommand('createLink', false, url);
-                } else if (command === 'lineHeightIncrease' || command === 'lineHeightDecrease') {
-                    const delta = command === 'lineHeightIncrease' ? 0.1 : -0.1;
-                    applyLineHeight(editor, delta);
                 } else if (command === 'justifyLeft' || command === 'justifyCenter' || command === 'justifyRight') {
                     const alignmentMap = {
                         justifyLeft: 'left',
@@ -3514,7 +3582,38 @@ function applyTextStyle(editor, styleKey, options = {}) {
     });
 }
 
-function applyLineHeight(editor, delta, options = {}) {
+function getLineHeightRatioFromSelection(editor, options = {}) {
+    const selection = window.getSelection();
+    const applyToAllOnCollapse = options.applyToAllOnCollapse !== false;
+    let blocks = [];
+    if (!selection || selection.rangeCount === 0) {
+        blocks = Array.from(editor.querySelectorAll(ALIGN_BLOCK_SELECTOR));
+    } else {
+        let range = selection.getRangeAt(0);
+        if (
+            (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) &&
+            savedRteSelection &&
+            editor.contains(savedRteSelection.startContainer) &&
+            editor.contains(savedRteSelection.endContainer)
+        ) {
+            range = savedRteSelection;
+        }
+        const isCollapsed = range.collapsed;
+        if (isCollapsed && applyToAllOnCollapse) {
+            blocks = Array.from(editor.querySelectorAll(ALIGN_BLOCK_SELECTOR));
+        } else {
+            blocks = getBlockElementsInRange(editor, range);
+        }
+    }
+    const target = blocks[0] || editor;
+    const computed = window.getComputedStyle(target);
+    const fontSize = Number.parseFloat(computed.fontSize) || 16;
+    const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.5;
+    const ratio = lineHeight / fontSize;
+    return Math.min(3, Math.max(1, ratio));
+}
+
+function applyLineHeightRatio(editor, ratio, options = {}) {
     const selection = window.getSelection();
     const applyToAllOnCollapse = options.applyToAllOnCollapse !== false;
     let blocks = [];
@@ -3528,13 +3627,13 @@ function applyLineHeight(editor, delta, options = {}) {
             blocks = getBlockElementsInRange(editor, range);
         }
     }
+    const targetRatio = Math.min(3, Math.max(1, Number.parseFloat(ratio) || 1.5));
+    if (!blocks.length) {
+        editor.style.lineHeight = targetRatio.toFixed(2);
+        return;
+    }
     blocks.forEach((block) => {
-        const computed = window.getComputedStyle(block);
-        const fontSize = Number.parseFloat(computed.fontSize) || 16;
-        const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.5;
-        const currentRatio = lineHeight / fontSize;
-        const nextRatio = Math.min(3, Math.max(1, currentRatio + delta));
-        block.style.lineHeight = nextRatio.toFixed(2);
+        block.style.lineHeight = targetRatio.toFixed(2);
     });
 }
 
