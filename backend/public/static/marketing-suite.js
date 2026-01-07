@@ -2370,7 +2370,8 @@ case 'strip': return {
     blocks: [], 
     fullWidth: false,   // Kept your existing setting
     padding: '20px',    // Kept your existing setting
-    borderRadius: '0'   // Added new setting
+    borderRadius: '0',  // Added new setting
+    margin: '0'         // Added margin control
 };
       case 'text': return { text: '<h3>New Text Block</h3><p>Enter your content here.</p>' };
         case 'boxedtext': return { text: '<p>This is text inside a colored box.</p>', bgColor: '#f1f5f9' };
@@ -2426,12 +2427,19 @@ function createBlockElement(block, index, parentArray) {
     // --- STRIP SPECIAL HANDLING ---
     if (block.type === 'strip') {
         el.classList.add('is-strip');
+        if (block.content.fullWidth) {
+            el.classList.add('is-fullwidth');
+        }
         // Get styles with defaults
-        const pad = block.content.padding !== undefined ? block.content.padding : '20px';
-        const radius = block.content.borderRadius !== undefined ? block.content.borderRadius : '0';
+        const padValue = Number.parseInt(block.content.padding, 10);
+        const radiusValue = Number.parseInt(block.content.borderRadius, 10);
+        const marginValue = Number.parseInt(block.content.margin, 10);
+        const pad = Number.isFinite(padValue) ? padValue : 20;
+        const radius = Number.isFinite(radiusValue) ? radiusValue : 0;
+        const margin = Number.isFinite(marginValue) ? marginValue : 0;
         
         el.innerHTML = `
-        <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px;">
+        <div class="ms-strip" style="background-color: ${block.content.bgColor || '#ffffff'}; padding: ${pad}px; border-radius: ${radius}px; margin: 0 ${margin}px; width: calc(100% - ${margin * 2}px);">
             <div class="ms-strip-inner"></div>
         </div>
         <div class="block-actions">
@@ -2585,10 +2593,14 @@ function openBlockEditor(block) {
                     <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full Width Background</label>
                 </div>
 
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:16px;">
+                <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
                     <div class="ms-field">
                         <label>Padding (px)</label>
                         <input type="number" id="input-padding" value="${parseInt(block.content.padding) || 20}" oninput="window.updateBlockProp('padding', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Margin (px)</label>
+                        <input type="number" id="input-margin" value="${parseInt(block.content.margin) || 0}" oninput="window.updateBlockProp('margin', this.value)">
                     </div>
                     <div class="ms-field">
                         <label>Corner Radius</label>
