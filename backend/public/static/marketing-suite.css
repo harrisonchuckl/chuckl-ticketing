@@ -145,6 +145,11 @@ body {
   z-index: 1;
 }
 
+.ms-builder-block.is-strip.is-fullwidth {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .ms-builder-block.is-strip .block-actions {
   pointer-events: none;
   z-index: 2;
