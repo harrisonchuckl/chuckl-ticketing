@@ -262,6 +262,13 @@ enum MarketingTemplateChangeStatus {
   REJECTED
 }
 
+enum MarketingIntelligentCampaignKind {
+  MONTHLY_DIGEST
+  NEW_ON_SALE_BATCH
+  ALMOST_SOLD_OUT
+  ADDON_UPSELL
+}
+
 enum MarketingAutomationTriggerType {
   AFTER_PURCHASE
   NO_PURCHASE_DAYS
@@ -476,6 +483,7 @@ model User {
   marketingDailySendCounters              MarketingDailySendCounter[]
   marketingDailyEventRollups              MarketingDailyEventRollup[]
   marketingEmailEventReceipts             MarketingEmailEventReceipt[]
+  marketingIntelligentCampaigns           MarketingIntelligentCampaign[]
   campaignDrafts                          CampaignDraft[]
   upsellBundles                           UpsellBundle[]
 
@@ -1883,6 +1891,7 @@ model MarketingTemplate {
   lockedBy        User?                            @relation("MarketingTemplateLockedBy", fields: [lockedByUserId], references: [id])
   campaigns       MarketingCampaign[]
   automationSteps MarketingAutomationStep[]
+  intelligentCampaigns MarketingIntelligentCampaign[]
   versions        MarketingTemplateVersion[]
   changeRequests  MarketingTemplateChangeRequest[]
   sendSnapshots   MarketingSendSnapshot[]
@@ -2008,6 +2017,24 @@ model MarketingCampaign {
 
   @@index([tenantId])
   @@index([showId])
+}
+
+model MarketingIntelligentCampaign {
+  id         String                           @id @default(cuid())
+  tenantId   String
+  kind       MarketingIntelligentCampaignKind
+  enabled    Boolean                          @default(true)
+  templateId String
+  configJson Json
+  lastRunAt  DateTime?
+  createdAt  DateTime                         @default(now())
+  updatedAt  DateTime                         @updatedAt
+
+  tenant   User              @relation(fields: [tenantId], references: [id])
+  template MarketingTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([tenantId])
+  @@index([templateId])
 }
 
 model MarketingCampaignRecipient {
