@@ -50,6 +50,7 @@ const appState = {
   searchResults: null,
   modal: null,
   contactPage: 0,
+  intelligentCampaigns: [],
 };
 
 function truncatePayload(payload, limit = 3000) {
@@ -449,14 +450,221 @@ async function renderCampaigns() {
   }
 }
 
-function renderIntelligentCampaigns() {
-  const main = document.getElementById('ms-main');
-  main.innerHTML = `
-    <div class="ms-card">
-      <h2>Intelligent Campaigns</h2>
-      <p class="ms-muted">Plan, personalize, and optimize multi-step campaigns from one place. Content coming soon.</p>
+const intelligentCampaignCatalog = [
+  {
+    kind: 'MONTHLY_DIGEST',
+    title: 'Monthly Digest',
+    description: 'Monthly highlights with upcoming shows and recommendations.',
+  },
+  {
+    kind: 'NEW_ON_SALE_BATCH',
+    title: 'New On Sale',
+    description: 'Automatic announcements when new shows go on sale.',
+  },
+  {
+    kind: 'ALMOST_SOLD_OUT',
+    title: 'Almost Sold Out',
+    description: 'Promote shows that are close to selling out.',
+  },
+  {
+    kind: 'ADDON_UPSELL',
+    title: 'Add-on Upsell',
+    description: 'Encourage add-ons for recent purchasers.',
+  },
+];
+
+function normalizeConfigJson(configJson) {
+  if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) return {};
+  return { ...configJson };
+}
+
+function renderConfigFields(configJson) {
+  const entries = Object.entries(normalizeConfigJson(configJson));
+  if (!entries.length) {
+    return '<div class="ms-muted">No settings configured yet.</div>';
+  }
+  return entries
+    .map(([key, value]) => {
+      const keyToken = encodeURIComponent(key);
+      const safeKey = escapeHtml(key);
+      if (typeof value === 'boolean') {
+        return `
+          <div class="ms-field">
+            <label class="ms-checkbox-row">
+              <input type="checkbox" data-config-key="${keyToken}" ${value ? 'checked' : ''} />
+              ${safeKey}
+            </label>
+          </div>
+        `;
+      }
+      if (typeof value === 'number') {
+        return renderFormRow(
+          key,
+          `<input type="number" data-config-key="${keyToken}" value="${value}" />`
+        );
+      }
+      if (typeof value === 'string') {
+        return renderFormRow(
+          key,
+          `<input type="text" data-config-key="${keyToken}" value="${escapeHtml(value)}" />`
+        );
+      }
+      return renderFormRow(key, `<div class="ms-muted">${escapeHtml(JSON.stringify(value))}</div>`);
+    })
+    .join('');
+}
+
+function coerceConfigValue(input, originalValue) {
+  if (typeof originalValue === 'boolean') return Boolean(input.checked);
+  if (typeof originalValue === 'number') {
+    const parsed = Number(input.value);
+    return Number.isNaN(parsed) ? originalValue : parsed;
+  }
+  return input.value;
+}
+
+function renderIntelligentCampaignCard(campaign, templates) {
+  const templateOptions = templates.length
+    ? templates
+        .map(
+          (template) =>
+            `<option value="${template.id}" ${campaign.templateId === template.id ? 'selected' : ''}>${escapeHtml(
+              template.name || template.subject || template.id
+            )}</option>`
+        )
+        .join('')
+    : '<option value="">No templates available</option>';
+  return `
+    <div class="ms-card" data-intelligent-kind="${campaign.kind}">
+      <div class="ms-toolbar" style="justify-content:space-between;">
+        <div>
+          <h3>${escapeHtml(campaign.title)}</h3>
+          <div class="ms-muted">${escapeHtml(campaign.description)}</div>
+        </div>
+        <label class="ms-checkbox-row">
+          <input type="checkbox" data-intelligent-enabled ${campaign.enabled ? 'checked' : ''} />
+          Enabled
+        </label>
+      </div>
+      <div class="ms-field" style="margin-top:12px;">
+        <label>Template</label>
+        <select data-intelligent-template>${templateOptions}</select>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="ms-muted" style="margin-bottom:6px;">Settings</div>
+        ${renderConfigFields(campaign.configJson)}
+      </div>
+      <div class="ms-toolbar" style="justify-content:flex-end;margin-top:12px;">
+        <button class="ms-primary" data-intelligent-save>Save</button>
+      </div>
     </div>
   `;
+}
+
+function renderIntelligentCampaigns() {
+  const main = document.getElementById('ms-main');
+  main.innerHTML = '<div class="ms-card">Loading intelligent campaigns...</div>';
+
+  Promise.all([fetchJson('/api/marketing/intelligent'), fetchJson(`${API_BASE}/templates`)])
+    .then(([intelligentData, templatesData]) => {
+      const templates = templatesData.items || [];
+      const items = intelligentData.items || [];
+      const configByKind = new Map(items.map((item) => [item.kind, item]));
+      const fallbackTemplateId = templates[0]?.id || '';
+      const campaigns = intelligentCampaignCatalog.map((campaign) => {
+        const config = configByKind.get(campaign.kind) || {};
+        return {
+          ...campaign,
+          enabled: config.enabled ?? false,
+          templateId: config.templateId ?? fallbackTemplateId,
+          configJson: normalizeConfigJson(config.configJson),
+        };
+      });
+      appState.intelligentCampaigns = campaigns;
+      appState.templates = templates;
+
+      main.innerHTML = `
+        <div class="ms-card">
+          <div class="ms-toolbar" style="justify-content:space-between;">
+            <div>
+              <h2>Intelligent Campaigns</h2>
+              <div class="ms-muted">Configure AI-powered campaigns that run automatically.</div>
+            </div>
+          </div>
+          <div class="ms-grid cols-2" style="margin-top:16px;">
+            ${campaigns.map((campaign) => renderIntelligentCampaignCard(campaign, templates)).join('')}
+          </div>
+        </div>
+      `;
+
+      main.querySelectorAll('[data-intelligent-kind]').forEach((card) => {
+        const kind = card.getAttribute('data-intelligent-kind');
+        const campaign = campaigns.find((item) => item.kind === kind);
+        if (!campaign) return;
+        const enabledInput = card.querySelector('[data-intelligent-enabled]');
+        const templateSelect = card.querySelector('[data-intelligent-template]');
+        const saveButton = card.querySelector('[data-intelligent-save]');
+
+        if (enabledInput) {
+          enabledInput.addEventListener('change', () => {
+            campaign.enabled = enabledInput.checked;
+          });
+        }
+
+        if (templateSelect) {
+          templateSelect.addEventListener('change', () => {
+            campaign.templateId = templateSelect.value;
+          });
+        }
+
+        card.querySelectorAll('[data-config-key]').forEach((input) => {
+          const key = input.getAttribute('data-config-key');
+          if (!key) return;
+          const decodedKey = decodeURIComponent(key);
+          const originalValue = campaign.configJson[decodedKey];
+          input.addEventListener('change', () => {
+            campaign.configJson[decodedKey] = coerceConfigValue(input, originalValue);
+          });
+        });
+
+        if (saveButton) {
+          saveButton.addEventListener('click', async () => {
+            if (!campaign.templateId) {
+              toast('Select a template before saving.', 'error');
+              return;
+            }
+            saveButton.disabled = true;
+            saveButton.textContent = 'Saving...';
+            try {
+              const response = await fetchJson(`/api/marketing/intelligent/${campaign.kind}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  enabled: campaign.enabled,
+                  templateId: campaign.templateId,
+                  configJson: campaign.configJson,
+                }),
+              });
+              const updated = response.config || {};
+              campaign.enabled = updated.enabled ?? campaign.enabled;
+              campaign.templateId = updated.templateId ?? campaign.templateId;
+              campaign.configJson = normalizeConfigJson(updated.configJson);
+              toast('Intelligent campaign saved.', 'success');
+            } catch (error) {
+              console.error('[marketing-suite] intelligent campaign save failed', error);
+              toast(error.message || 'Failed to save intelligent campaign.', 'error');
+            } finally {
+              saveButton.disabled = false;
+              saveButton.textContent = 'Save';
+            }
+          });
+        }
+      });
+    })
+    .catch((error) => {
+      console.error('[marketing-suite] intelligent campaigns load failed', error);
+      showErrorState(main, "Couldn't load intelligent campaigns", error, renderIntelligentCampaigns);
+    });
 }
 
 async function renderCampaignCreate() {
