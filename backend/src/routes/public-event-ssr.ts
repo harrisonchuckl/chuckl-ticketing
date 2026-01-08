@@ -1355,6 +1355,81 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
  }).join('');
 };
 
+  const normalizeVideoUrl = (value: unknown) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const candidate = /^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+      const parsed = new URL(candidate);
+      if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+      return parsed.toString();
+    } catch {
+      return '';
+    }
+  };
+
+  const getVideoEmbedInfo = (rawUrl: string) => {
+    const safeUrl = normalizeVideoUrl(rawUrl);
+    if (!safeUrl) return null;
+    let parsed: URL;
+    try {
+      parsed = new URL(safeUrl);
+    } catch {
+      return null;
+    }
+    const hostname = parsed.hostname.replace(/^www\./, '');
+    const path = parsed.pathname;
+    if (hostname === 'youtu.be') {
+      const id = path.split('/').filter(Boolean)[0];
+      if (id) return { type: 'iframe', src: `https://www.youtube-nocookie.com/embed/${id}` };
+    }
+    if (hostname.endsWith('youtube.com')) {
+      const id = parsed.searchParams.get('v') || path.split('/').filter(Boolean).pop();
+      if (id) return { type: 'iframe', src: `https://www.youtube-nocookie.com/embed/${id}` };
+    }
+    if (hostname.endsWith('vimeo.com')) {
+      const id = path.split('/').filter(Boolean).pop();
+      if (id) return { type: 'iframe', src: `https://player.vimeo.com/video/${id}` };
+    }
+    if (/\.(mp4|webm|ogg)(\?|#|$)/i.test(path)) {
+      return { type: 'video', src: safeUrl };
+    }
+    return { type: 'iframe', src: safeUrl };
+  };
+
+  const renderVideoEmbed = (rawUrl: string, index: number) => {
+    const info = getVideoEmbedInfo(rawUrl);
+    if (!info) return '';
+    if (info.type === 'video') {
+      return `
+        <div class="video-card">
+          <div class="video-embed">
+            <video controls src="${escAttr(info.src)}" aria-label="Video ${index + 1}"></video>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="video-card">
+        <div class="video-embed">
+          <iframe
+            src="${escAttr(info.src)}"
+            title="Video ${index + 1}"
+            loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          ></iframe>
+        </div>
+      </div>
+    `;
+  };
+
+  const videoEmbeds = [show.videoUrlOne, show.videoUrlTwo]
+    .map((value) => normalizeVideoUrl(value))
+    .filter(Boolean)
+    .map((url, index) => renderVideoEmbed(url, index))
+    .filter(Boolean);
+
    const renderRelatedShows = () => {
   if (!relatedShows.length) {
     return editorEnabled
@@ -2076,6 +2151,40 @@ const bfHtml = bfPence > 0 ? `<span class="t-fee">+ ${esc(pFmt(bfPence))}<sup cl
 .gallery-strip-img{ width:100%; height:100%; object-fit:cover; transition: transform 0.4s; }
 .gallery-strip-item:hover .gallery-strip-img{ transform: scale(1.03); }
 
+.video-section {
+ display: flex;
+ flex-direction: column;
+ gap: 18px;
+}
+
+.video-grid {
+ display: grid;
+ grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+ gap: 18px;
+}
+
+.video-card {
+ background: #0f172a;
+ border-radius: 18px;
+ overflow: hidden;
+ border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.video-embed {
+ position: relative;
+ padding-top: 56.25%;
+ background: #0f172a;
+}
+
+.video-embed iframe,
+.video-embed video {
+ position: absolute;
+ inset: 0;
+ width: 100%;
+ height: 100%;
+ border: 0;
+}
+
 .gallery-nav{
  position:absolute;
  top: 50%;
@@ -2644,6 +2753,14 @@ ${consent.banner}
          </div>
          ${editorOverlay('Buttons')}
      </div>
+${videoEmbeds.length ? `
+     <div class="video-section">
+       <span class="section-label">Videos</span>
+       <div class="video-grid">
+         ${videoEmbeds.join('')}
+       </div>
+     </div>
+` : ''}
 ${renderRelatedShows()}
    </div>
 

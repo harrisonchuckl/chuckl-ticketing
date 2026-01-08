@@ -8317,6 +8317,19 @@ async function createShow(){
         +'style="min-height:150px; border:1px solid var(--border); border-radius:8px; padding:12px; background: #fff;"></div>'
         +'<div class="muted">Write a compelling description for your attendees.</div>'
         +'</div>'
+
+        +'<div class="grid grid-2" style="margin-bottom: 20px; gap: 16px;">'
+          +'<div class="grid" style="gap:4px;">'
+            +'<label>Video one</label>'
+            +'<input id="video_one" class="ctl" type="url" placeholder="https://youtube.com/watch?v=..." />'
+            +'<div class="tip">Optional. Paste a YouTube, Vimeo, or direct video link.</div>'
+          +'</div>'
+          +'<div class="grid" style="gap:4px;">'
+            +'<label>Video two</label>'
+            +'<input id="video_two" class="ctl" type="url" placeholder="https://youtube.com/watch?v=..." />'
+            +'<div class="tip">Optional. Paste another major video link.</div>'
+          +'</div>'
+        +'</div>'
         
         +'</div>' // End COL 1
 
@@ -8675,6 +8688,8 @@ setActionMode();
             bindAiClearOnUserEdit($('#doors_open_time'));
             bindAiClearOnUserEdit($('#age_guidance'));
             bindAiClearOnUserEdit($('#tags'));
+            bindAiClearOnUserEdit($('#video_one'));
+            bindAiClearOnUserEdit($('#video_two'));
             bindAiClearOnUserEdit(eventTypeSelect);
             bindAiClearOnUserEdit(categorySelect);
 
@@ -8715,6 +8730,16 @@ setActionMode();
             if (draft.descriptionHtml && $('#desc')){
               $('#desc').innerHTML = draft.descriptionHtml;
               markAi($('#desc'), 'editor');
+            }
+
+            if (draft.videoUrlOne && $('#video_one')) {
+              $('#video_one').value = String(draft.videoUrlOne);
+              markAi($('#video_one'));
+            }
+
+            if (draft.videoUrlTwo && $('#video_two')) {
+              $('#video_two').value = String(draft.videoUrlTwo);
+              markAi($('#video_two'));
             }
 
             // --- Type + Category ---
@@ -9009,6 +9034,8 @@ if (existingShowId) {
       if (externalTicketInput) {
         externalTicketInput.value = s.externalTicketUrl || '';
       }
+      if ($('#video_one')) $('#video_one').value = s.videoUrlOne || '';
+      if ($('#video_two')) $('#video_two').value = s.videoUrlTwo || '';
 
       // Tags
       if ($('#tags')) {
@@ -9142,6 +9169,8 @@ if (venueInput.dataset.venueApproved !== '1'){
             var imageUrl = prevMain.src || null;
             var descHtml = $('#desc').innerHTML.trim();
             var externalTicketUrl = externalTicketInput ? externalTicketInput.value.trim() : '';
+            var videoUrlOne = $('#video_one') ? $('#video_one').value.trim() : '';
+            var videoUrlTwo = $('#video_two') ? $('#video_two').value.trim() : '';
             
             // New fields
            var eventType = eventTypeSelect ? eventTypeSelect.value : '';
@@ -9181,6 +9210,22 @@ if (externalTicketUrl) {
   }
 }
 
+if (videoUrlOne) {
+  try {
+    new URL(videoUrlOne);
+  } catch (err) {
+    throw new Error('Video one must be a valid URL.');
+  }
+}
+
+if (videoUrlTwo) {
+  try {
+    new URL(videoUrlTwo);
+  } catch (err) {
+    throw new Error('Video two must be a valid URL.');
+  }
+}
+
 if (saveMode === 'EXTERNAL' && !externalTicketUrl) {
   throw new Error('Backup / external ticket link is required to publish using the external link.');
 }
@@ -9212,6 +9257,8 @@ var showRes = await j(saveUrl, {
     eventType: eventType,
     eventCategory: eventCategory,
     additionalImages: additionalImages,
+    videoUrlOne: videoUrlOne || null,
+    videoUrlTwo: videoUrlTwo || null,
 
     // capture which flow they chose
     usesAllocatedSeating: saveMode === 'ALLOCATED',

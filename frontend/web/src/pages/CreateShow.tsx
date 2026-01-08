@@ -14,6 +14,8 @@ export default function CreateShow() {
   const [venueId, setVenueId] = useState<string>("");
   const [date, setDate] = useState<string>(""); // YYYY-MM-DD
   const [description, setDescription] = useState<string>("");
+  const [videoUrlOne, setVideoUrlOne] = useState<string>("");
+  const [videoUrlTwo, setVideoUrlTwo] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -38,7 +40,9 @@ export default function CreateShow() {
         title: title.trim(),
         venueId,
         date, // accepted as YYYY-MM-DD or ISO by the API (also supports DD/MM/YYYY)
-        description: description.trim() || undefined
+        description: description.trim() || undefined,
+        videoUrlOne: videoUrlOne.trim() || undefined,
+        videoUrlTwo: videoUrlTwo.trim() || undefined,
       });
 
       // jump straight to ticket setup, pass venueId for seating suggestions
@@ -90,6 +94,28 @@ export default function CreateShow() {
               placeholder="Give buyers a quick reason to attend (optional)."
             />
           </label>
+
+          <div className="field-row">
+            <label className="field">
+              <span>Video one</span>
+              <input
+                type="url"
+                value={videoUrlOne}
+                onChange={e => setVideoUrlOne(e.target.value)}
+                placeholder="https://youtube.com/watch?v=..."
+              />
+            </label>
+
+            <label className="field">
+              <span>Video two</span>
+              <input
+                type="url"
+                value={videoUrlTwo}
+                onChange={e => setVideoUrlTwo(e.target.value)}
+                placeholder="https://youtube.com/watch?v=..."
+              />
+            </label>
+          </div>
         </section>
 
         <section className="section-card">

@@ -963,6 +963,8 @@ model Show {
   title       String?
   description String?
   imageUrl    String?
+  videoUrlOne String?
+  videoUrlTwo String?
   date        DateTime
   endDate     DateTime?
 

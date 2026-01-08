@@ -18,7 +18,14 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
 export const api = {
   // Events
-  createShow: (payload: { title: string; venueId: string; date: string; description?: string | null }) =>
+  createShow: (payload: {
+    title: string;
+    venueId: string;
+    date: string;
+    description?: string | null;
+    videoUrlOne?: string | null;
+    videoUrlTwo?: string | null;
+  }) =>
     request<{ ok: true; showId: string }>("/events", {
       method: "POST",
       body: JSON.stringify(payload)

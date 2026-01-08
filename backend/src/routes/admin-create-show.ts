@@ -22,6 +22,8 @@ type CreateShowBody = {
   pricePence: number; // integer, e.g. 2300 for £23.00
   capacityOverride?: number | null; // if provided, overrides venue.capacity
   imageUrl?: string | null; // store on Show.description or separate field later
+  videoUrlOne?: string | null;
+  videoUrlTwo?: string | null;
 };
 
 // -------- Helpers ----------
@@ -52,7 +54,7 @@ router.get("/shows/list", async (req: Request, res: Response) => {
 // -------- Create a show (with initial TicketType) ----------
 router.post("/shows/create", async (req: Request<{}, {}, CreateShowBody>, res: Response) => {
   try {
-    const { title, description, date, venueId, pricePence, capacityOverride, imageUrl } = req.body;
+    const { title, description, date, venueId, pricePence, capacityOverride, imageUrl, videoUrlOne, videoUrlTwo } = req.body;
 
     if (!title) return res.status(400).json({ error: true, message: "Title is required" });
     if (!date) return res.status(400).json({ error: true, message: "Date is required" });
@@ -77,6 +79,8 @@ router.post("/shows/create", async (req: Request<{}, {}, CreateShowBody>, res: R
       data: {
         title,
         description: buildDescriptionWithImage(description, imageUrl),
+        videoUrlOne: videoUrlOne ? String(videoUrlOne).trim() : null,
+        videoUrlTwo: videoUrlTwo ? String(videoUrlTwo).trim() : null,
         date: when,
         venueId,
         ticketTypes: {

@@ -31,8 +31,13 @@ function parseDateFlexible(input: string): Date | null {
  */
 router.post('/', async (req, res) => {
   try {
-    const { title, venueId, date, description } = (req.body || {}) as {
-      title?: string; venueId?: string; date?: string; description?: string | null;
+    const { title, venueId, date, description, videoUrlOne, videoUrlTwo } = (req.body || {}) as {
+      title?: string;
+      venueId?: string;
+      date?: string;
+      description?: string | null;
+      videoUrlOne?: string | null;
+      videoUrlTwo?: string | null;
     };
 
     if (!title || !title.trim()) return res.status(400).json({ ok: false, error: 'title is required' });
@@ -52,6 +57,8 @@ router.post('/', async (req, res) => {
         venueId: String(venueId),
         date: when,
         description: description ? String(description).trim() : null,
+        videoUrlOne: videoUrlOne ? String(videoUrlOne).trim() : null,
+        videoUrlTwo: videoUrlTwo ? String(videoUrlTwo).trim() : null,
         status: ShowStatus.DRAFT,
       },
       select: { id: true }
