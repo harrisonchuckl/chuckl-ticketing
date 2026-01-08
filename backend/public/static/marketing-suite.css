@@ -801,3 +801,73 @@ body {
 .ms-field input, .ms-field select, .ms-field textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--ms-border); }
 
 .ms-muted { color: var(--ms-muted); font-size: 13px; }
+
+/* Event block styles */
+.ms-event-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.ms-event-grid.is-full {
+  grid-template-columns: 1fr;
+}
+
+.ms-event-grid.is-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ms-event-card {
+  background: #ffffff;
+  border: 1px solid var(--ms-border);
+  border-radius: 16px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ms-event-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.ms-event-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ms-event-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ms-event-meta {
+  font-size: 12px;
+  color: var(--ms-muted);
+}
+
+.ms-event-price {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ms-event-settings-card {
+  margin-bottom: 16px;
+}
+
+.ms-event-selection-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ms-event-selection-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
