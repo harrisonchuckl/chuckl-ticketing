@@ -420,6 +420,11 @@ body {
   padding-right: 0;
 }
 
+.ms-builder-block.is-imagecard.is-fullwidth {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .ms-builder-block.is-strip > .block-actions {
   pointer-events: none;
   z-index: 2;
@@ -504,6 +509,38 @@ body {
 .ms-boxed-text {
   width: 100%;
   box-sizing: border-box;
+}
+
+.ms-image-card-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ms-image-card {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.ms-image-card.is-transparent {
+  border: 1px dashed #cbd5e1;
+}
+
+.ms-image-card-media img {
+  width: 100%;
+  display: block;
+}
+
+.ms-image-card-caption > *:first-child {
+  margin-top: 0;
+}
+
+.ms-image-card-caption > *:last-child {
+  margin-bottom: 0;
 }
 
 .ms-space-block {
