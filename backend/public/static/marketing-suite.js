@@ -1820,6 +1820,10 @@ window.updateActiveBlockBg = function(color) {
             if (boxedTransparentToggle && boxedTransparentToggle.checked) {
                 boxedTransparentToggle.checked = false;
             }
+            const imageCardTransparentToggle = document.getElementById('input-imagecard-transparent');
+            if (imageCardTransparentToggle && imageCardTransparentToggle.checked) {
+                imageCardTransparentToggle.checked = false;
+            }
             recordEditorHistory({ immediate: false });
             renderBuilderCanvas(); // Re-render to show change
         }
@@ -1844,6 +1848,13 @@ function getActiveButtonBlock() {
     if (!window.activeBlockId) return null;
     const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
     if (!block || block.type !== 'button') return null;
+    return block;
+}
+
+function getActiveImageCardBlock() {
+    if (!window.activeBlockId) return null;
+    const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+    if (!block || block.type !== 'imagecard') return null;
     return block;
 }
 
@@ -1957,6 +1968,14 @@ window.updateBoxedTextGradientEnd = function(color) {
     });
 };
 
+window.updateImageCardTransparency = function(isTransparent) {
+    const block = getActiveImageCardBlock();
+    if (!block || !block.content) return;
+    block.content.isTransparent = isTransparent;
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
+};
+
 window.updateActiveButtonBg = function(color) {
     const block = getActiveButtonBlock();
     if (!block || !block.content) return;
@@ -2025,6 +2044,7 @@ window.updateActiveTextColor = function(color) {
     if (block && block.content) {
         block.content.color = color;
         block.content.text = editor.innerHTML;
+        syncImageCardCaption(block);
         recordEditorHistory({ immediate: false });
         renderBuilderCanvas();
     }
@@ -2043,6 +2063,7 @@ window.updateActiveTextHighlight = function(color) {
     if (block && block.content) {
         block.content.highlightColor = color;
         block.content.text = editor.innerHTML;
+        syncImageCardCaption(block);
         recordEditorHistory({ immediate: false });
         renderBuilderCanvas();
     }
@@ -3553,7 +3574,22 @@ case 'strip': return {
                 },
             };
         }
-        case 'imagecard': return { src: placeholderLarge, caption: '<p style="margin-top:10px;">Image caption goes here.</p>' };
+        case 'imagecard': return {
+            src: placeholderLarge,
+            alt: 'Image',
+            link: '',
+            showId: '',
+            showImageUrl: '',
+            linkShowId: '',
+            text: '<p style="margin-top:10px;">Image caption goes here.</p>',
+            caption: '<p style="margin-top:10px;">Image caption goes here.</p>',
+            bgColor: '#ffffff',
+            isTransparent: false,
+            fullWidth: false,
+            padding: '20',
+            borderRadius: '12',
+            margin: '0',
+        };
         case 'button': return {
             label: 'Click Here',
             url: 'https://',
@@ -3866,6 +3902,31 @@ function getImageGroupDefaultTextStyle(style = {}) {
     };
 }
 
+function ensureImageCardContent(block) {
+    if (!block.content) block.content = {};
+    const content = block.content;
+    if (!content.src) content.src = getPlaceholderImage(600, 300);
+    if (content.alt === undefined) content.alt = 'Image';
+    if (content.link === undefined) content.link = '';
+    if (content.showId === undefined) content.showId = '';
+    if (content.showImageUrl === undefined) content.showImageUrl = '';
+    if (content.linkShowId === undefined) content.linkShowId = '';
+    const fallbackText = content.caption || content.text || '<p style="margin-top:10px;">Image caption goes here.</p>';
+    if (!content.text) content.text = fallbackText;
+    if (!content.caption) content.caption = content.text;
+    if (!content.bgColor) content.bgColor = '#ffffff';
+    if (typeof content.isTransparent !== 'boolean') content.isTransparent = false;
+    if (typeof content.fullWidth !== 'boolean') content.fullWidth = false;
+    if (!content.padding) content.padding = '20';
+    if (!content.margin) content.margin = '0';
+    if (!content.borderRadius) content.borderRadius = '12';
+}
+
+function syncImageCardCaption(block) {
+    if (!block || block.type !== 'imagecard' || !block.content) return;
+    block.content.caption = block.content.text || '';
+}
+
 function createImageGroupImage() {
     return {
         src: getPlaceholderImage(300, 200),
@@ -4053,6 +4114,14 @@ function createBlockElement(block, index, parentArray) {
 
     if (block.type === 'boxedtext') {
         el.classList.add('is-boxedtext');
+        if (block.content.fullWidth) {
+            el.classList.add('is-fullwidth');
+        }
+    }
+
+    if (block.type === 'imagecard') {
+        ensureImageCardContent(block);
+        el.classList.add('is-imagecard');
         if (block.content.fullWidth) {
             el.classList.add('is-fullwidth');
         }
@@ -4293,8 +4362,30 @@ function getPreviewHtml(block) {
                     .join('')}
             </div>`; 
         }
-        case 'imagecard': 
-            return `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%; display:block;"><div style="padding:15px;">${c.caption}</div></div>`; 
+        case 'imagecard': {
+            ensureImageCardContent(block);
+            const isTransparent = Boolean(c.isTransparent);
+            const padValue = Number.parseInt(c.padding, 10);
+            const radiusValue = Number.parseInt(c.borderRadius, 10);
+            const marginValue = Number.parseInt(c.margin, 10);
+            const pad = Number.isFinite(padValue) ? padValue : 20;
+            const radius = Number.isFinite(radiusValue) ? radiusValue : 12;
+            const margin = Number.isFinite(marginValue) ? Math.max(marginValue, 0) : 0;
+            const backgroundColor = isTransparent ? 'transparent' : (c.bgColor || '#ffffff');
+            const imageHtml = `<img src="${escapeHtml(c.src)}" alt="${escapeHtml(c.alt || '')}" style="width:100%; display:block;">`;
+            const linkedImage = c.link
+                ? `<a href="${escapeHtml(c.link)}" target="_blank" rel="noopener noreferrer">${imageHtml}</a>`
+                : imageHtml;
+            const caption = c.text || c.caption || '';
+            return `
+                <div class="ms-image-card-wrapper" style="padding: 0 ${margin}px;">
+                    <div class="ms-image-card${isTransparent ? ' is-transparent' : ''}" style="background-color:${backgroundColor}; padding:${pad}px; border-radius:${radius}px;">
+                        <div class="ms-image-card-media">${linkedImage}</div>
+                        <div class="ms-image-card-caption">${caption}</div>
+                    </div>
+                </div>
+            `;
+        }
         case 'button': {
             const radiusValue = Number.parseInt(c.borderRadius, 10);
             const radius = Number.isFinite(radiusValue) ? radiusValue : 6;
@@ -4606,6 +4697,7 @@ function setupRichTextEditor(container, block) {
     editor.addEventListener('focus', updateSelectionState);
     editor.addEventListener('input', () => {
         block.content.text = editor.innerHTML;
+        syncImageCardCaption(block);
         recordEditorHistory({ immediate: false });
         renderBuilderCanvas();
     });
@@ -4642,6 +4734,7 @@ function setupRichTextEditor(container, block) {
             applyLineHeightRatio(editor, ratio);
             updateLineSpacingValue(ratio);
             block.content.text = editor.innerHTML;
+            syncImageCardCaption(block);
             recordEditorHistory({ immediate: false });
             renderBuilderCanvas();
             saveSelection();
@@ -4687,6 +4780,7 @@ function setupRichTextEditor(container, block) {
                 document.execCommand(command, false, null);
             }
             block.content.text = editor.innerHTML;
+            syncImageCardCaption(block);
             recordEditorHistory();
             renderBuilderCanvas();
             saveSelection();
@@ -4708,6 +4802,7 @@ function setupRichTextEditor(container, block) {
                 applyFontFamily(editor, fontFamily);
             }
             block.content.text = editor.innerHTML;
+            syncImageCardCaption(block);
             recordEditorHistory();
             renderBuilderCanvas();
             saveSelection();
@@ -5209,7 +5304,296 @@ function openBlockEditor(block) {
             });
         }
     }
-    // --- IMAGE EDITOR ---
+    // --- IMAGE CARD EDITOR ---
+    else if (block.type === 'imagecard') {
+        ensureImageCardContent(block);
+        const showOptions = appState.shows
+            .map((show) => `<option value="${show.id}">${escapeHtml(show.title)}</option>`)
+            .join('');
+        const selectedShowId = block.content.showId || '';
+        const selectedShow = appState.shows.find((show) => show.id === selectedShowId);
+        const linkShowId = block.content.linkShowId || '';
+        const linkShow = appState.shows.find((show) => show.id === linkShowId);
+        const selectedShowLink = selectedShow ? getShowLink(selectedShow) : '';
+        const linkShowLink = linkShow ? getShowLink(linkShow) : '';
+        const showImageGrid = selectedShow
+            ? renderShowImageGrid(selectedShow, block.content.showImageUrl || block.content.src)
+            : '<div class="ms-muted">Select a show to browse its images.</div>';
+        const padding = Number.parseInt(block.content.padding, 10);
+        const margin = Number.parseInt(block.content.margin, 10);
+        const borderRadius = Number.parseInt(block.content.borderRadius, 10);
+
+        container.innerHTML = `
+            <div class="ms-card ms-image-card-settings">
+                <div class="ms-sidebar-section-title">Image card styling</div>
+                ${renderModernColorPicker('Background color', 'imagecard-bg', block.content.bgColor || '#ffffff', 'updateActiveBlockBg')}
+                <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:12px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <input type="checkbox" id="input-fullWidth" ${block.content.fullWidth ? 'checked' : ''} onchange="window.updateBlockProp('fullWidth', this.checked)" style="width:auto; margin:0;">
+                    <label style="margin:0; font-size:13px; cursor:pointer;" for="input-fullWidth">Full width background</label>
+                </div>
+                <div class="ms-field" style="display:flex; align-items:center; gap:8px; margin-top:10px; background:white; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <input type="checkbox" id="input-imagecard-transparent" ${block.content.isTransparent ? 'checked' : ''} onchange="window.updateImageCardTransparency(this.checked)" style="width:auto; margin:0;">
+                    <label style="margin:0; font-size:13px; cursor:pointer;" for="input-imagecard-transparent">Transparent background</label>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:12px; margin-top:16px;">
+                    <div class="ms-field">
+                        <label>Padding (px)</label>
+                        <input type="number" id="input-padding" value="${Number.isFinite(padding) ? padding : 20}" oninput="window.updateBlockProp('padding', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Side gap (px)</label>
+                        <input type="number" id="input-margin" value="${Number.isFinite(margin) ? margin : 0}" oninput="window.updateBlockProp('margin', this.value)">
+                    </div>
+                    <div class="ms-field">
+                        <label>Corner radius</label>
+                        <input type="number" id="input-borderRadius" value="${Number.isFinite(borderRadius) ? borderRadius : 12}" oninput="window.updateBlockProp('borderRadius', this.value)">
+                    </div>
+                </div>
+            </div>
+            <div class="ms-card ms-image-card-settings">
+                <div class="ms-sidebar-section-title">Image settings</div>
+                <div class="ms-field">
+                    <label>Upload image</label>
+                    <div class="ms-image-upload">
+                        <input type="file" id="ms-imagecard-upload-input" accept="image/*" />
+                        <div class="ms-image-upload-drop" id="ms-imagecard-upload-drop">
+                            <strong>Drop image here</strong>
+                            <span>or click to upload</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="ms-field">
+                    <label>Image URL</label>
+                    <input id="edit-imagecard-src" value="${escapeHtml(block.content.src)}">
+                    <div class="ms-muted">Paste a public image URL, or upload above.</div>
+                </div>
+                <div class="ms-field"><label>Alt Text</label><input id="edit-imagecard-alt" value="${escapeHtml(block.content.alt)}"></div>
+                <div class="ms-field">
+                    <label>Show images</label>
+                    <select id="ms-imagecard-show-select">
+                        <option value="">Select show</option>
+                        ${showOptions}
+                    </select>
+                    <div id="ms-imagecard-show-grid" class="ms-image-grid-wrapper">${showImageGrid}</div>
+                    <label class="ms-checkbox-row">
+                        <input type="checkbox" id="ms-imagecard-link-selected-show" ${selectedShowId && block.content.linkShowId === selectedShowId ? 'checked' : ''}>
+                        Link image to selected show
+                    </label>
+                </div>
+                <div class="ms-field">
+                    <label>Link URL</label>
+                    <input id="edit-imagecard-link" value="${escapeHtml(block.content.link || '')}" placeholder="https://example.com">
+                </div>
+                <div class="ms-field">
+                    <label>Link to show</label>
+                    <select id="ms-imagecard-link-show">
+                        <option value="">No show link</option>
+                        ${showOptions}
+                    </select>
+                    <div class="ms-muted">Select a show to auto-fill the link URL.</div>
+                </div>
+            </div>
+            ${getRichTextEditorMarkup(block)}
+        `;
+
+        const uploadInput = container.querySelector('#ms-imagecard-upload-input');
+        const uploadDrop = container.querySelector('#ms-imagecard-upload-drop');
+        const imageSrcInput = container.querySelector('#edit-imagecard-src');
+        const imageAltInput = container.querySelector('#edit-imagecard-alt');
+        const showSelect = container.querySelector('#ms-imagecard-show-select');
+        const showGrid = container.querySelector('#ms-imagecard-show-grid');
+        const linkInput = container.querySelector('#edit-imagecard-link');
+        const linkShowSelect = container.querySelector('#ms-imagecard-link-show');
+        const linkSelectedShowCheckbox = container.querySelector('#ms-imagecard-link-selected-show');
+
+        const refreshShowGrid = (show, selectedUrl) => {
+            if (!showGrid) return;
+            showGrid.innerHTML = show
+                ? renderShowImageGrid(show, selectedUrl || block.content.showImageUrl || block.content.src)
+                : '<div class="ms-muted">Select a show to browse its images.</div>';
+            bindShowImageTiles();
+        };
+
+        if (selectedShowId) {
+            ensureShowImages(selectedShowId).then((loadedShow) => {
+                if (!loadedShow) return;
+                refreshShowGrid(loadedShow, block.content.showImageUrl || block.content.src);
+            });
+        }
+
+        if (showSelect) showSelect.value = selectedShowId;
+        if (linkShowSelect) linkShowSelect.value = linkShowId;
+        if (linkInput && linkShowLink && !block.content.link) {
+            linkInput.value = linkShowLink;
+            block.content.link = linkShowLink;
+        }
+
+        const syncImagePreview = () => {
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+        };
+
+        const handleImageSelection = (url, { fromShow = false } = {}) => {
+            block.content.src = url;
+            if (fromShow) {
+                block.content.showImageUrl = url;
+            } else {
+                block.content.showId = '';
+                block.content.showImageUrl = '';
+                if (showSelect) showSelect.value = '';
+            }
+            if (!block.content.alt) {
+                block.content.alt = 'Email image';
+                if (imageAltInput) imageAltInput.value = block.content.alt;
+            }
+            if (imageSrcInput) imageSrcInput.value = url;
+            syncImagePreview();
+        };
+
+        const bindShowImageTiles = () => {
+            if (!showGrid) return;
+            showGrid.querySelectorAll('[data-image-url]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const url = button.getAttribute('data-image-url');
+                    if (!url) return;
+                    handleImageSelection(url, { fromShow: true });
+                    block.content.showId = showSelect ? showSelect.value : '';
+                    const show = appState.shows.find((item) => item.id === block.content.showId);
+                    if (show && !block.content.alt) {
+                        block.content.alt = show.title || 'Show image';
+                        if (imageAltInput) imageAltInput.value = block.content.alt;
+                    }
+                    if (linkSelectedShowCheckbox?.checked && show) {
+                        const showLink = getShowLink(show);
+                        block.content.link = showLink;
+                        block.content.linkShowId = show.id;
+                        if (linkInput) linkInput.value = showLink;
+                        if (linkShowSelect) linkShowSelect.value = show.id;
+                    }
+                    syncImagePreview();
+                });
+            });
+        };
+
+        if (uploadDrop && uploadInput) {
+            uploadDrop.addEventListener('click', () => uploadInput.click());
+            uploadDrop.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                uploadDrop.classList.add('is-dragover');
+            });
+            uploadDrop.addEventListener('dragleave', () => {
+                uploadDrop.classList.remove('is-dragover');
+            });
+            uploadDrop.addEventListener('drop', (event) => {
+                event.preventDefault();
+                uploadDrop.classList.remove('is-dragover');
+                const file = event.dataTransfer.files?.[0];
+                if (file) {
+                    readImageFile(file, (result) => {
+                        if (typeof result === 'string') handleImageSelection(result);
+                    });
+                }
+            });
+            uploadInput.addEventListener('change', (event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                    readImageFile(file, (result) => {
+                        if (typeof result === 'string') handleImageSelection(result);
+                    });
+                }
+            });
+        }
+
+        if (imageSrcInput) {
+            imageSrcInput.addEventListener('input', (e) => {
+                block.content.src = e.target.value;
+                block.content.showImageUrl = '';
+                syncImagePreview();
+            });
+        }
+
+        if (imageAltInput) {
+            imageAltInput.addEventListener('input', (e) => {
+                block.content.alt = e.target.value;
+                syncImagePreview();
+            });
+        }
+
+        if (showSelect) {
+            showSelect.addEventListener('change', () => {
+                block.content.showId = showSelect.value || '';
+                block.content.showImageUrl = '';
+                const showId = block.content.showId;
+                const show = appState.shows.find((item) => item.id === showId);
+                if (linkSelectedShowCheckbox) {
+                    linkSelectedShowCheckbox.checked = Boolean(show && block.content.linkShowId === show.id);
+                }
+                if (!showId) {
+                    refreshShowGrid(null);
+                    return;
+                }
+                ensureShowImages(showId).then((loadedShow) => {
+                    refreshShowGrid(loadedShow || show, block.content.src);
+                });
+            });
+        }
+
+        if (linkInput) {
+            linkInput.addEventListener('input', (e) => {
+                block.content.link = e.target.value;
+                const currentLinkShow = appState.shows.find((item) => item.id === block.content.linkShowId);
+                if (currentLinkShow && getShowLink(currentLinkShow) !== block.content.link) {
+                    block.content.linkShowId = '';
+                    if (linkShowSelect) linkShowSelect.value = '';
+                    if (linkSelectedShowCheckbox) linkSelectedShowCheckbox.checked = false;
+                }
+                syncImagePreview();
+            });
+        }
+
+        if (linkShowSelect) {
+            linkShowSelect.addEventListener('change', () => {
+                const show = appState.shows.find((item) => item.id === linkShowSelect.value);
+                if (show) {
+                    const showLink = getShowLink(show);
+                    block.content.link = showLink;
+                    block.content.linkShowId = show.id;
+                    if (linkInput) linkInput.value = showLink;
+                } else {
+                    block.content.linkShowId = '';
+                }
+                if (linkSelectedShowCheckbox) {
+                    linkSelectedShowCheckbox.checked = Boolean(show && show.id === block.content.showId);
+                }
+                syncImagePreview();
+            });
+        }
+
+        if (linkSelectedShowCheckbox) {
+            linkSelectedShowCheckbox.addEventListener('change', () => {
+                const show = appState.shows.find((item) => item.id === (showSelect ? showSelect.value : ''));
+                if (!show) {
+                    linkSelectedShowCheckbox.checked = false;
+                    return;
+                }
+                if (linkSelectedShowCheckbox.checked) {
+                    const showLink = getShowLink(show);
+                    block.content.link = showLink;
+                    block.content.linkShowId = show.id;
+                    if (linkInput) linkInput.value = showLink;
+                    if (linkShowSelect) linkShowSelect.value = show.id;
+                } else if (block.content.linkShowId === show.id) {
+                    block.content.linkShowId = '';
+                }
+                syncImagePreview();
+            });
+        }
+
+        bindShowImageTiles();
+        setupRichTextEditor(container, block);
+        syncImageCardCaption(block);
+    }
+    // --- IMAGE GROUP EDITOR ---
     else if (block.type === 'imagegroup') {
         ensureImageGroupContent(block);
         const showOptions = appState.shows
