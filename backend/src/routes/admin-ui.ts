@@ -15502,7 +15502,7 @@ function renderInterests(customer){
       +     '<div class="ps-header-section">'
       +       '<h1 class="ps-header-title">Product Store</h1>'
       +       '<h2 class="ps-header-subtitle">' + (isEdit ? 'Edit Product' : 'Create Product') + '</h2>'
-      +       '<p class="ps-header-desc">Create products to sell as add on to tickets, as stand alone products or a ticket upgrades such as VIP experiences, meals or anything else you\'d like to add on.</p>'
+      +       '<p class="ps-header-desc">Create products to sell as add on to tickets, as stand alone products or a ticket upgrades such as VIP experiences, meals or anything else you&rsquo;d like to add on.</p>'
       +     '</div>'
       +     '<div class="ps-form-grid">'
       +       '<div class="ps-section-card full">'
