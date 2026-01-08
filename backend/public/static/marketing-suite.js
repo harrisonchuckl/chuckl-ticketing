@@ -36,6 +36,55 @@ const mergeTags = [
   { group: 'Links', value: '{{links.unsubscribeLink}}', label: 'Unsubscribe link' },
 ];
 
+const SOCIAL_ICON_LIBRARY = {
+  facebook: {
+    label: 'Facebook',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>',
+  },
+  instagram: {
+    label: 'Instagram',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="3"/><circle cx="17" cy="7" r="1"/></svg>',
+  },
+  x: {
+    label: 'X (Twitter)',
+    svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l16 16M20 4L4 20"/></svg>',
+  },
+  tiktok: {
+    label: 'TikTok',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5v10a4 4 0 1 1-3-3.87"/><path d="M11 5c2.5 3 5 4 8 4"/></svg>',
+  },
+  youtube: {
+    label: 'YouTube',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="10" rx="2"/><polygon points="10 9 15 12 10 15 10 9"/></svg>',
+  },
+  linkedin: {
+    label: 'LinkedIn',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="8" y1="11" x2="8" y2="16"/><line x1="8" y1="8" x2="8" y2="8"/><path d="M12 16v-5a2 2 0 0 1 4 0v5"/></svg>',
+  },
+  pinterest: {
+    label: 'Pinterest',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 20l1.5-6"/><path d="M10.5 9.5a2.5 2.5 0 1 1 3.5 2.3"/></svg>',
+  },
+  snapchat: {
+    label: 'Snapchat',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5a4 4 0 0 1 4 4v2c0 1.1.9 2 2 2"/><path d="M6 13a2 2 0 0 0 2-2V9a4 4 0 0 1 8 0v2a2 2 0 0 0 2 2"/><path d="M8 17c1.5 1.3 2.5 2 4 2s2.5-.7 4-2"/></svg>',
+  },
+  website: {
+    label: 'Website',
+    svg:
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/></svg>',
+  },
+};
+
+const SOCIAL_DEFAULT_TYPES = ['facebook', 'instagram', 'x', 'tiktok'];
+
 const API_BASE = '/admin/api/marketing';
 const SEARCH_API_BASE = '/admin/marketing/api';
 
@@ -50,6 +99,7 @@ const appState = {
   searchResults: null,
   modal: null,
   contactPage: 0,
+  socialLinks: [],
 };
 
 function truncatePayload(payload, limit = 3000) {
@@ -84,6 +134,70 @@ function fetchJson(url, opts = {}) {
 function escapeHtml(value) {
   const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   return String(value || '').replace(/[&<>"']/g, (match) => map[match]);
+}
+
+function normalizeSocialType(type) {
+  const raw = String(type || '').toLowerCase().trim();
+  if (raw === 'twitter') return 'x';
+  return SOCIAL_ICON_LIBRARY[raw] ? raw : null;
+}
+
+function normalizeSocialLinks(links, { includeDefaults = false } = {}) {
+  const items = Array.isArray(links) ? links : [];
+  const map = new Map();
+  items.forEach((entry) => {
+    const type = normalizeSocialType(entry?.type);
+    if (!type || map.has(type)) return;
+    map.set(type, { type, url: String(entry?.url || '') });
+  });
+  const baseItems = includeDefaults
+    ? SOCIAL_DEFAULT_TYPES.map((type) => map.get(type) || { type, url: '' })
+    : SOCIAL_DEFAULT_TYPES.filter((type) => map.has(type)).map((type) => map.get(type));
+  const extraItems = [];
+  map.forEach((value, type) => {
+    if (!SOCIAL_DEFAULT_TYPES.includes(type)) extraItems.push(value);
+  });
+  return baseItems.concat(extraItems);
+}
+
+function buildDefaultSocialItems() {
+  return normalizeSocialLinks(appState.socialLinks || [], { includeDefaults: true });
+}
+
+function ensureSocialBlockContent(block) {
+  if (!block.content) block.content = {};
+  if (Array.isArray(block.content.items)) {
+    block.content.items = normalizeSocialLinks(block.content.items);
+    const profileMap = new Map();
+    (appState.socialLinks || []).forEach((entry) => {
+      const type = normalizeSocialType(entry?.type);
+      const url = String(entry?.url || '').trim();
+      if (type && url) profileMap.set(type, url);
+    });
+    block.content.items = block.content.items.map((item) => {
+      const type = normalizeSocialType(item.type);
+      if (type && (!item.url || !String(item.url).trim()) && profileMap.has(type)) {
+        return { ...item, url: profileMap.get(type) };
+      }
+      return item;
+    });
+    return;
+  }
+  const legacy = block.content || {};
+  const legacyItems = [];
+  if (legacy.fb) legacyItems.push({ type: 'facebook', url: legacy.fb });
+  if (legacy.ig) legacyItems.push({ type: 'instagram', url: legacy.ig });
+  if (legacy.tw) legacyItems.push({ type: 'x', url: legacy.tw });
+  if (legacy.tiktok) legacyItems.push({ type: 'tiktok', url: legacy.tiktok });
+  block.content.items = normalizeSocialLinks(legacyItems.length ? legacyItems : buildDefaultSocialItems(), {
+    includeDefaults: true,
+  });
+}
+
+function renderSocialIcon(type) {
+  const normalized = normalizeSocialType(type);
+  if (!normalized) return '';
+  return SOCIAL_ICON_LIBRARY[normalized]?.svg || '';
 }
 
 function navigateTo(path) {
@@ -1428,14 +1542,16 @@ async function renderTemplateEditor(templateId) {
   main.innerHTML = '<div class="ms-card">Loading editor...</div>';
 
   try {
-    const [templateData, versionsData, showsData] = await Promise.all([
+    const [templateData, versionsData, showsData, profileData] = await Promise.all([
       fetchJson(`${API_BASE}/templates/${templateId}`),
       fetchJson(`${API_BASE}/templates/${templateId}/versions`),
       fetchJson('/admin/shows'),
+      fetchJson('/auth/me').catch(() => ({ user: {} })),
     ]);
     const template = templateData.template;
     const versions = versionsData.versions || [];
     appState.shows = showsData.items || [];
+    appState.socialLinks = normalizeSocialLinks(profileData?.user?.socialLinks || [], { includeDefaults: true });
 
   window.currentTemplateMeta = {
     name: template.name || '',
@@ -3462,7 +3578,7 @@ case 'strip': return {
         case 'space': return {
             height: 24,
         };
-        case 'social': return { fb: '#', ig: '#', tw: '#' };
+        case 'social': return { items: buildDefaultSocialItems() };
         case 'video': return { url: '', thumbnail: placeholderLarge };
         case 'code': return { html: '' };
         case 'product': return { productId: null, title: 'Product Name', price: '£0.00' };
@@ -3950,6 +4066,36 @@ function renderStaticFooter(canvas) {
     canvas.appendChild(footerEl);
 }
 
+function renderSocialBlock(content = {}) {
+    const legacyItems = [];
+    if (content.fb) legacyItems.push({ type: 'facebook', url: content.fb });
+    if (content.ig) legacyItems.push({ type: 'instagram', url: content.ig });
+    if (content.tw) legacyItems.push({ type: 'x', url: content.tw });
+    if (content.tiktok) legacyItems.push({ type: 'tiktok', url: content.tiktok });
+    const items = Array.isArray(content.items)
+        ? normalizeSocialLinks(content.items)
+        : legacyItems.length
+            ? normalizeSocialLinks(legacyItems, { includeDefaults: true })
+            : buildDefaultSocialItems();
+    const displayItems = items.length ? items : buildDefaultSocialItems();
+    return `
+        <div class="ms-social-block">
+            ${displayItems
+                .map((item) => {
+                    const icon = renderSocialIcon(item.type);
+                    if (!icon) return '';
+                    const label = SOCIAL_ICON_LIBRARY[normalizeSocialType(item.type)]?.label || 'Social link';
+                    const url = String(item.url || '').trim();
+                    if (url) {
+                        return `<a class="ms-social-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(label)}">${icon}</a>`;
+                    }
+                    return `<span class="ms-social-link is-empty" aria-label="${escapeHtml(label)}">${icon}</span>`;
+                })
+                .join('')}
+        </div>
+    `;
+}
+
 function renderEventGrid(block) {
     const content = block.content || {};
     const shows = getEventBlockShows(block);
@@ -4108,7 +4254,7 @@ function getPreviewHtml(block) {
             const height = Number.isFinite(heightValue) ? heightValue : 24;
             return `<div class="ms-space-block" style="height:${height}px;"></div>`;
         }
-        case 'social': return `<div style="text-align:center; display:flex; justify-content:center; gap:10px;">Social Icons Placeholder</div>`;
+        case 'social': return renderSocialBlock(c);
         case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;">▶</div></div>`;
         case 'code': return `<div style="background:#f1f5f9; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code /&gt;</div>`;
         case 'event': return renderEventGrid(block);
@@ -4894,6 +5040,81 @@ function openBlockEditor(block) {
                 const parsed = Number.parseInt(e.target.value, 10);
                 block.content.height = Number.isFinite(parsed) ? Math.max(0, parsed) : '';
                 updateButtonContent();
+            });
+        }
+    }
+    // --- SOCIAL EDITOR ---
+    else if (block.type === 'social') {
+        ensureSocialBlockContent(block);
+        const items = Array.isArray(block.content.items) ? block.content.items : buildDefaultSocialItems();
+        const options = Object.keys(SOCIAL_ICON_LIBRARY)
+            .map((type) => `<option value="${type}">${escapeHtml(SOCIAL_ICON_LIBRARY[type].label)}</option>`)
+            .join('');
+        container.innerHTML = `
+            <div class="ms-social-editor">
+                <div class="ms-sidebar-section-title">Social media links</div>
+                <div class="ms-social-list">
+                    ${items
+                        .map((item, index) => {
+                            const label = SOCIAL_ICON_LIBRARY[normalizeSocialType(item.type)]?.label || item.type;
+                            return `
+                                <div class="ms-social-row" data-social-index="${index}">
+                                    <span class="ms-social-icon">${renderSocialIcon(item.type)}</span>
+                                    <div class="ms-social-field">
+                                        <div class="ms-social-label">${escapeHtml(label)}</div>
+                                        <input type="url" value="${escapeHtml(item.url || '')}" placeholder="https://example.com" data-social-url />
+                                    </div>
+                                    <button type="button" class="ms-social-remove" data-social-remove aria-label="Remove">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    </button>
+                                </div>
+                            `;
+                        })
+                        .join('')}
+                </div>
+                <div class="ms-social-actions">
+                    <select class="ms-social-select" data-social-add-select>${options}</select>
+                    <button type="button" class="ms-secondary" data-social-add>Add icon</button>
+                </div>
+                <div class="ms-muted">Links auto-save as you type.</div>
+            </div>
+        `;
+
+        container.querySelectorAll('[data-social-index]').forEach((row) => {
+            const index = Number.parseInt(row.dataset.socialIndex, 10);
+            const urlInput = row.querySelector('[data-social-url]');
+            const removeBtn = row.querySelector('[data-social-remove]');
+            if (urlInput) {
+                urlInput.addEventListener('input', () => {
+                    block.content.items[index].url = urlInput.value;
+                    recordEditorHistory({ immediate: false });
+                    renderBuilderCanvas();
+                });
+            }
+            if (removeBtn) {
+                removeBtn.addEventListener('click', () => {
+                    block.content.items.splice(index, 1);
+                    recordEditorHistory();
+                    renderBuilderCanvas();
+                    openBlockEditor(block);
+                });
+            }
+        });
+
+        const addSelect = container.querySelector('[data-social-add-select]');
+        const addBtn = container.querySelector('[data-social-add]');
+        if (addBtn && addSelect) {
+            addBtn.addEventListener('click', () => {
+                const type = addSelect.value;
+                if (!SOCIAL_ICON_LIBRARY[type]) return;
+                if (block.content.items.some((item) => item.type === type)) {
+                    toast('That icon is already included.', 'warning');
+                    return;
+                }
+                block.content.items.push({ type, url: '' });
+                recordEditorHistory();
+                renderBuilderCanvas();
+                openBlockEditor(block);
             });
         }
     }

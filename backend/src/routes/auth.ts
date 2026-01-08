@@ -696,6 +696,7 @@ router.get("/me", requireAuth, async (req, res) => {
       brandLogoUrl: true,
       brandColorRgb: true,
       brandColorHex: true,
+      socialLinks: true,
       addressLine1: true,
       addressLine2: true,
       city: true,
@@ -719,6 +720,8 @@ router.put("/me", requireAuth, async (req, res) => {
       : normaliseStorefrontSlug(req.body.storefrontSlug);
 
   try {
+    const socialLinks =
+      Array.isArray(req.body?.socialLinks) ? req.body.socialLinks : req.body?.socialLinks === null ? null : undefined;
     const updated = await prisma.user.update({
       where: { id: userId },
       data: {
@@ -733,6 +736,7 @@ router.put("/me", requireAuth, async (req, res) => {
         brandLogoUrl: req.body?.brandLogoUrl ?? null,
         brandColorRgb: req.body?.brandColorRgb ?? null,
         brandColorHex: req.body?.brandColorHex ?? null,
+        socialLinks,
         addressLine1: req.body?.addressLine1 ?? null,
         addressLine2: req.body?.addressLine2 ?? null,
         city: req.body?.city ?? null,
@@ -757,6 +761,7 @@ router.put("/me", requireAuth, async (req, res) => {
         brandLogoUrl: true,
         brandColorRgb: true,
         brandColorHex: true,
+        socialLinks: true,
         addressLine1: true,
         addressLine2: true,
         city: true,

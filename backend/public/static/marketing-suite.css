@@ -871,3 +871,107 @@ body {
   flex-direction: column;
   gap: 6px;
 }
+
+.ms-social-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ms-social-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ms-social-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--ms-border);
+  background: #ffffff;
+}
+
+.ms-social-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  display: grid;
+  place-items: center;
+  color: var(--ms-text);
+  flex-shrink: 0;
+}
+
+.ms-social-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ms-social-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ms-muted);
+}
+
+.ms-social-row input {
+  width: 100%;
+}
+
+.ms-social-remove {
+  border: none;
+  background: #f8fafc;
+  color: var(--ms-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.ms-social-remove:hover {
+  background: #e2e8f0;
+  color: var(--ms-text);
+}
+
+.ms-social-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ms-social-select {
+  flex: 1;
+  min-width: 180px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ms-border);
+}
+
+.ms-social-block {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ms-social-link {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  display: grid;
+  place-items: center;
+  color: var(--ms-text);
+  text-decoration: none;
+}
+
+.ms-social-link.is-empty {
+  opacity: 0.6;
+}
