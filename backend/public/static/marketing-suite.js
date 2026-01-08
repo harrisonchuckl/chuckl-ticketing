@@ -3893,7 +3893,14 @@ function normalizeImageGroupImage(image = {}) {
 function ensureImageGroupContent(block) {
     if (!block.content) block.content = {};
     const images = Array.isArray(block.content.images) ? block.content.images : [];
-    block.content.images = images.map((image) => normalizeImageGroupImage(image));
+    block.content.images = images.map((image) => {
+        const normalized = normalizeImageGroupImage(image);
+        if (image && typeof image === 'object') {
+            Object.assign(image, normalized);
+            return image;
+        }
+        return normalized;
+    });
     if (!block.content.images.length) {
         block.content.images = [createImageGroupImage(), createImageGroupImage()];
     }
