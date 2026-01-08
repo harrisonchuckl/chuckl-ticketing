@@ -2975,15 +2975,17 @@ router.get(
       gap:12px;
       margin-top:16px;
     }
-    .ps-image-row{
-      display:grid;
-      grid-template-columns:80px 1fr auto;
+    .ps-image-list{
+      display:flex;
+      flex-wrap:wrap;
       gap:12px;
-      align-items:center;
-      padding:10px 12px;
-      background:#f8fafc;
-      border:1px solid #cbd5e0;
+      margin-top:16px;
+    }
+    .ps-image-row{
       border-radius:12px;
+      overflow:hidden;
+      border:1px solid #e2e8f0;
+      background:#f8fafc;
     }
     .ps-image-thumb{
       width:80px;
@@ -15436,7 +15438,7 @@ function renderInterests(customer){
       +           '<div class="ps-upload-hint">Drag &amp; drop or click to upload (up to 10 images)</div>'
       +         '</div>'
       +         '<input id="ps_image_input" type="file" accept="image/*" multiple style="display:none" />'
-      +         '<div id="ps_image_rows" class="ps-inline-list"></div>'
+      +         '<div id="ps_image_rows" class="ps-image-list"></div>'
       +         '<div id="ps_image_msg" class="ps-upload-note"></div>'
       +       '</div>'
       +       '<div class="ps-section-card full">'
@@ -15446,10 +15448,6 @@ function renderInterests(customer){
       +         '<label class="ps-form-field">'
       +           '<span class="ps-form-label">Title</span>'
       +           '<input id="ps_prod_title" class="ps-input" placeholder="Enter product title" />'
-      +         '</label>'
-      +         '<label class="ps-form-field">'
-      +           '<span class="ps-form-label">Slug</span>'
-      +           '<input id="ps_prod_slug" class="ps-input" placeholder="product-url-slug" />'
       +         '</label>'
       +         '<label class="ps-form-field">'
       +           '<span class="ps-form-label">Description</span>'
@@ -15493,9 +15491,6 @@ function renderInterests(customer){
       +         '<label class="ps-form-field">'
       +           '<span class="ps-form-label">Price (£)</span>'
       +           '<input id="ps_prod_price" class="ps-input" placeholder="10.00" type="number" step="0.01" />'
-      +         '</label>'
-      +         '<label class="ps-checkbox">'
-      +           '<input type="checkbox" id="ps_prod_custom" /> Allow custom amount'
       +         '</label>'
       +       '</div>'
       +       '<div class="ps-section-card">'
@@ -15610,14 +15605,8 @@ function renderInterests(customer){
       row.innerHTML = ''
         + '<div class="ps-image-thumb">'
         +   '<img src="' + escapeHtml(data.url || '') + '" alt="Product image" />'
-        + '</div>'
-        + '<div>'
-        +   '<div style="font-weight:600; color:#1e293b;">Image</div>'
-        +   '<div class="muted" style="font-size:13px; word-break:break-all;">' + escapeHtml(data.url || '') + '</div>'
-        + '</div>'
-        + '<button class="ps-inline-btn" data-remove>Remove</button>';
+        + '</div>';
       $('#ps_image_rows').appendChild(row);
-      row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
     }
 
     $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
@@ -15719,12 +15708,6 @@ function renderInterests(customer){
       });
     }
 
-    $('#ps_prod_title').addEventListener('input', function(){
-      if (!$('#ps_prod_slug').value){
-        $('#ps_prod_slug').value = slugifyLocal($('#ps_prod_title').value);
-      }
-    });
-
     function collectVariants(){
       return Array.prototype.slice.call($('#ps_variant_rows').children).map(function(row, index){
         return {
@@ -15753,13 +15736,11 @@ function renderInterests(customer){
         var p = data.product;
         if (!p) return;
         $('#ps_prod_title').value = p.title || '';
-        $('#ps_prod_slug').value = p.slug || '';
         $('#ps_prod_desc').value = p.description || '';
         $('#ps_prod_category').value = p.category || 'MERCH';
         $('#ps_prod_fulfilment').value = p.fulfilmentType || 'NONE';
         $('#ps_prod_status').value = p.status || 'ACTIVE';
         $('#ps_prod_price').value = poundsFromPence(firstDefined(p.pricePence, ''));
-        $('#ps_prod_custom').checked = !!p.allowCustomAmount;
         $('#ps_prod_inventory').value = p.inventoryMode || 'UNLIMITED';
         $('#ps_prod_stock').value = firstDefined(p.stockCount, '');
         $('#ps_prod_low_stock').value = firstDefined(p.lowStockThreshold, '');
@@ -15779,13 +15760,13 @@ function renderInterests(customer){
       try{
         var payload = {
           title: ($('#ps_prod_title').value || '').trim(),
-          slug: ($('#ps_prod_slug').value || '').trim(),
+          slug: slugifyLocal($('#ps_prod_title').value),
           description: ($('#ps_prod_desc').value || '').trim(),
           category: $('#ps_prod_category').value,
           fulfilmentType: $('#ps_prod_fulfilment').value,
           status: $('#ps_prod_status').value,
           pricePence: penceFromPounds($('#ps_prod_price').value),
-          allowCustomAmount: $('#ps_prod_custom').checked,
+          allowCustomAmount: false,
           inventoryMode: $('#ps_prod_inventory').value,
           stockCount: $('#ps_prod_stock').value,
           lowStockThreshold: $('#ps_prod_low_stock').value,
