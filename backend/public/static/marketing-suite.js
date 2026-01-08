@@ -1537,6 +1537,10 @@ async function renderTemplateEditor(templateId) {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
             <span>Product</span>
           </div>
+          <div class="ms-draggable-block" draggable="true" data-type="event">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h4M8 18h8"/></svg>
+            <span>Event</span>
+          </div>
           <div class="ms-draggable-block" draggable="true" data-type="code">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
             <span>Code</span>
@@ -1862,6 +1866,35 @@ window.updateActiveBlockColor = function(color) {
             renderBuilderCanvas();
         }
     }
+};
+
+function updateEventBlockStyle(prop, value) {
+    if (!window.activeBlockId) return;
+    const block = findBlockById(window.editorBlocks || [], window.activeBlockId);
+    if (!block || block.type !== 'event' || !block.content) return;
+    block.content[prop] = value;
+    recordEditorHistory({ immediate: false });
+    renderBuilderCanvas();
+}
+
+window.updateActiveEventCardBg = function(color) {
+    updateEventBlockStyle('cardBackground', color);
+};
+
+window.updateActiveEventCardBorder = function(color) {
+    updateEventBlockStyle('cardBorder', color);
+};
+
+window.updateActiveEventTitleColor = function(color) {
+    updateEventBlockStyle('titleColor', color);
+};
+
+window.updateActiveEventMetaColor = function(color) {
+    updateEventBlockStyle('metaColor', color);
+};
+
+window.updateActiveEventPriceColor = function(color) {
+    updateEventBlockStyle('priceColor', color);
 };
 
 window.updateActiveTextColor = function(color) {
@@ -3433,6 +3466,20 @@ case 'strip': return {
         case 'video': return { url: '', thumbnail: placeholderLarge };
         case 'code': return { html: '' };
         case 'product': return { productId: null, title: 'Product Name', price: '£0.00' };
+        case 'event':
+            return {
+                selectionMode: 'shows',
+                showIds: [],
+                town: '',
+                county: '',
+                layout: 'grid',
+                cardBackground: '#ffffff',
+                cardBorder: '#e2e8f0',
+                titleColor: '#0f172a',
+                metaColor: '#64748b',
+                priceColor: '#0f172a',
+                fontFamily: 'Inter',
+            };
         default: return {};
     }
 }
@@ -3448,6 +3495,63 @@ function getShowLink(show) {
         return `/public/event/${show.id}`;
     }
     return '';
+}
+
+function getShowTown(show) {
+    return show?.town || show?.city || show?.location?.town || '';
+}
+
+function getShowCounty(show) {
+    return show?.county || show?.region || show?.location?.county || '';
+}
+
+function getShowVenue(show) {
+    return show?.venue || show?.venueName || show?.location?.venue || show?.locationName || '';
+}
+
+function getShowPrimaryImage(show) {
+    const images = collectShowImages(show);
+    if (images.length) return images[0].url;
+    return getPlaceholderImage(600, 360);
+}
+
+function formatShowDateTime(show) {
+    const dateValue = show?.date || show?.startDate || show?.startsAt || show?.startTime || show?.eventDate;
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return String(dateValue);
+    const dateText = date.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+    });
+    const timeText = date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+    return `${dateText} • ${timeText}`;
+}
+
+function getEventBlockShows(block) {
+    const content = block?.content || {};
+    const shows = Array.isArray(appState.shows) ? appState.shows : [];
+    const normalizedTown = String(content.town || '').trim().toLowerCase();
+    const normalizedCounty = String(content.county || '').trim().toLowerCase();
+    let filtered = shows;
+    if (content.selectionMode === 'shows') {
+        const selected = new Set(content.showIds || []);
+        filtered = shows.filter((show) => selected.has(show.id));
+    } else if (content.selectionMode === 'town' && normalizedTown) {
+        filtered = shows.filter((show) => String(getShowTown(show) || '').trim().toLowerCase() === normalizedTown);
+    } else if (content.selectionMode === 'county' && normalizedCounty) {
+        filtered = shows.filter((show) => String(getShowCounty(show) || '').trim().toLowerCase() === normalizedCounty);
+    }
+    return filtered.slice().sort((a, b) => {
+        const aDate = new Date(a?.date || a?.startDate || a?.startsAt || 0).getTime();
+        const bDate = new Date(b?.date || b?.startDate || b?.startsAt || 0).getTime();
+        if (Number.isNaN(aDate) || Number.isNaN(bDate)) return 0;
+        return aDate - bDate;
+    });
 }
 
 function collectShowImages(show) {
@@ -3846,6 +3950,60 @@ function renderStaticFooter(canvas) {
     canvas.appendChild(footerEl);
 }
 
+function renderEventGrid(block) {
+    const content = block.content || {};
+    const shows = getEventBlockShows(block);
+    if (!shows.length) {
+        return `<div class="ms-muted">Select events to populate this block.</div>`;
+    }
+    const layoutClass = content.layout === 'full' ? 'is-full' : 'is-grid';
+    const columns = content.layout === 'full' ? 1 : 2;
+    const fontFamily = FONT_FAMILY_MAP[content.fontFamily] || content.fontFamily || '"Inter", "Helvetica Neue", Arial, sans-serif';
+    const cardStyle = `
+        background:${content.cardBackground || '#ffffff'};
+        border:1px solid ${content.cardBorder || '#e2e8f0'};
+        border-radius:16px;
+        overflow:hidden;
+        text-decoration:none;
+        display:flex;
+        flex-direction:column;
+        font-family:${fontFamily};
+    `;
+    const titleStyle = `color:${content.titleColor || '#0f172a'}; font-size:16px; font-weight:600; margin:0 0 6px;`;
+    const metaStyle = `color:${content.metaColor || '#64748b'}; font-size:12px; margin:0;`;
+    const priceStyle = `color:${content.priceColor || '#0f172a'}; font-size:14px; font-weight:600; margin:10px 0 0;`;
+    return `
+        <div class="ms-event-grid ${layoutClass}" style="grid-template-columns:repeat(${columns}, minmax(0, 1fr));">
+            ${shows
+                .map((show) => {
+                    const title = escapeHtml(show.title || 'Untitled event');
+                    const imageUrl = getShowPrimaryImage(show);
+                    const dateTime = formatShowDateTime(show);
+                    const venue = getShowVenue(show);
+                    const town = getShowTown(show);
+                    const county = getShowCounty(show);
+                    const locationText = [venue, town, county].filter(Boolean).join(' • ');
+                    const price = show.priceFrom || show.price || '';
+                    const link = getShowLink(show);
+                    return `
+                        <a class="ms-event-card" href="${escapeHtml(link)}" style="${cardStyle}" target="_blank" rel="noopener noreferrer">
+                            <div class="ms-event-card-media">
+                                <img src="${escapeHtml(imageUrl)}" alt="${title}" style="width:100%; height:180px; object-fit:cover; display:block;">
+                            </div>
+                            <div class="ms-event-card-body" style="padding:14px;">
+                                <h3 class="ms-event-title" style="${titleStyle}">${title}</h3>
+                                ${dateTime ? `<p class="ms-event-meta" style="${metaStyle}">${escapeHtml(dateTime)}</p>` : ''}
+                                ${locationText ? `<p class="ms-event-meta" style="${metaStyle}">${escapeHtml(locationText)}</p>` : ''}
+                                ${price ? `<p class="ms-event-price" style="${priceStyle}">From ${escapeHtml(price)}</p>` : ''}
+                            </div>
+                        </a>
+                    `;
+                })
+                .join('')}
+        </div>
+    `;
+}
+
 /**
  * Re-added the core getPreviewHtml for the basic blocks
  */
@@ -3953,6 +4111,7 @@ function getPreviewHtml(block) {
         case 'social': return `<div style="text-align:center; display:flex; justify-content:center; gap:10px;">Social Icons Placeholder</div>`;
         case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;">▶</div></div>`;
         case 'code': return `<div style="background:#f1f5f9; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code /&gt;</div>`;
+        case 'event': return renderEventGrid(block);
         default: return `<div class="ms-muted">[${block.type.toUpperCase()} BLOCK]</div>`;
     }
 }
@@ -3998,6 +4157,7 @@ function getBlockTypeLabel(type) {
         imagegroup: 'Image Group',
         imagecard: 'Image Card',
         space: 'Space',
+        event: 'Event',
     };
     if (!type) return 'Block';
     return labels[type] || `${type.charAt(0).toUpperCase()}${type.slice(1)}`;
@@ -5467,6 +5627,176 @@ function openBlockEditor(block) {
                 if (loadedShow && showGrid) {
                     refreshShowGrid(loadedShow, block.content.showImageUrl || block.content.src);
                 }
+            });
+        }
+    }
+    else if (block.type === 'event') {
+        const selectionMode = block.content.selectionMode || 'shows';
+        const showsSorted = (appState.shows || []).slice().sort((a, b) => {
+            return String(a.title || '').localeCompare(String(b.title || ''));
+        });
+        const towns = Array.from(
+            new Set(
+                showsSorted
+                    .map((show) => getShowTown(show))
+                    .filter((value) => value && String(value).trim())
+            )
+        ).sort((a, b) => String(a).localeCompare(String(b)));
+        const counties = Array.from(
+            new Set(
+                showsSorted
+                    .map((show) => getShowCounty(show))
+                    .filter((value) => value && String(value).trim())
+            )
+        ).sort((a, b) => String(a).localeCompare(String(b)));
+
+        container.innerHTML = `
+            <div class="ms-card ms-event-settings-card">
+                <div class="ms-sidebar-section-title">Event selection</div>
+                <div class="ms-field">
+                    <label>Choose events by</label>
+                    <div class="ms-event-selection-row">
+                        <label class="ms-checkbox-row">
+                            <input type="radio" name="event-selection-mode" value="shows" ${selectionMode === 'shows' ? 'checked' : ''}>
+                            Individual shows
+                        </label>
+                        <label class="ms-checkbox-row">
+                            <input type="radio" name="event-selection-mode" value="town" ${selectionMode === 'town' ? 'checked' : ''}>
+                            Town
+                        </label>
+                        <label class="ms-checkbox-row">
+                            <input type="radio" name="event-selection-mode" value="county" ${selectionMode === 'county' ? 'checked' : ''}>
+                            County
+                        </label>
+                    </div>
+                </div>
+                <div class="ms-event-selection-panel" data-event-selection-panel="shows">
+                    <div class="ms-field">
+                        <label>Select shows</label>
+                        <div class="ms-event-selection-list">
+                            ${showsSorted
+                                .map(
+                                    (show) => `
+                                        <label class="ms-checkbox-row">
+                                            <input type="checkbox" data-event-show-id="${show.id}" ${block.content.showIds?.includes(show.id) ? 'checked' : ''}>
+                                            ${escapeHtml(show.title || 'Untitled show')}
+                                        </label>
+                                    `
+                                )
+                                .join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="ms-event-selection-panel" data-event-selection-panel="town">
+                    <div class="ms-field">
+                        <label>Town</label>
+                        <select id="ms-event-town-select">
+                            <option value="">Select town</option>
+                            ${towns.map((town) => `<option value="${escapeHtml(town)}">${escapeHtml(town)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div class="ms-event-selection-panel" data-event-selection-panel="county">
+                    <div class="ms-field">
+                        <label>County</label>
+                        <select id="ms-event-county-select">
+                            <option value="">Select county</option>
+                            ${counties.map((county) => `<option value="${escapeHtml(county)}">${escapeHtml(county)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="ms-card ms-event-settings-card">
+                <div class="ms-sidebar-section-title">Layout</div>
+                <div class="ms-field">
+                    <label>Grid style</label>
+                    <select id="ms-event-layout">
+                        <option value="grid" ${block.content.layout === 'grid' ? 'selected' : ''}>Two-column grid</option>
+                        <option value="full" ${block.content.layout === 'full' ? 'selected' : ''}>Full width (stacked)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="ms-card ms-event-settings-card">
+                <div class="ms-sidebar-section-title">Tile styling</div>
+                ${renderModernColorPicker('Tile background', 'event-card-bg', block.content.cardBackground || '#ffffff', 'updateActiveEventCardBg')}
+                ${renderModernColorPicker('Tile border', 'event-card-border', block.content.cardBorder || '#e2e8f0', 'updateActiveEventCardBorder')}
+                ${renderModernColorPicker('Title color', 'event-title-color', block.content.titleColor || '#0f172a', 'updateActiveEventTitleColor')}
+                ${renderModernColorPicker('Meta text color', 'event-meta-color', block.content.metaColor || '#64748b', 'updateActiveEventMetaColor')}
+                ${renderModernColorPicker('Price color', 'event-price-color', block.content.priceColor || '#0f172a', 'updateActiveEventPriceColor')}
+                <div class="ms-field">
+                    <label>Font family</label>
+                    <select id="ms-event-font-family">
+                        ${renderFontFamilyOptions(block.content.fontFamily || 'Inter')}
+                    </select>
+                </div>
+            </div>
+        `;
+
+        const panels = Array.from(container.querySelectorAll('[data-event-selection-panel]'));
+        const setSelectionMode = (mode) => {
+            panels.forEach((panel) => {
+                panel.style.display = panel.dataset.eventSelectionPanel === mode ? 'block' : 'none';
+            });
+        };
+        setSelectionMode(selectionMode);
+
+        container.querySelectorAll('input[name="event-selection-mode"]').forEach((input) => {
+            input.addEventListener('change', (event) => {
+                block.content.selectionMode = event.target.value;
+                setSelectionMode(event.target.value);
+                recordEditorHistory({ immediate: false });
+                renderBuilderCanvas();
+            });
+        });
+
+        const showCheckboxes = Array.from(container.querySelectorAll('[data-event-show-id]'));
+        showCheckboxes.forEach((checkbox) => {
+            checkbox.addEventListener('change', () => {
+                const selectedIds = showCheckboxes
+                    .filter((input) => input.checked)
+                    .map((input) => input.getAttribute('data-event-show-id'))
+                    .filter(Boolean);
+                block.content.showIds = selectedIds;
+                recordEditorHistory({ immediate: false });
+                renderBuilderCanvas();
+            });
+        });
+
+        const townSelect = container.querySelector('#ms-event-town-select');
+        if (townSelect) {
+            townSelect.value = block.content.town || '';
+            townSelect.addEventListener('change', () => {
+                block.content.town = townSelect.value;
+                recordEditorHistory({ immediate: false });
+                renderBuilderCanvas();
+            });
+        }
+
+        const countySelect = container.querySelector('#ms-event-county-select');
+        if (countySelect) {
+            countySelect.value = block.content.county || '';
+            countySelect.addEventListener('change', () => {
+                block.content.county = countySelect.value;
+                recordEditorHistory({ immediate: false });
+                renderBuilderCanvas();
+            });
+        }
+
+        const layoutSelect = container.querySelector('#ms-event-layout');
+        if (layoutSelect) {
+            layoutSelect.addEventListener('change', () => {
+                block.content.layout = layoutSelect.value;
+                recordEditorHistory({ immediate: false });
+                renderBuilderCanvas();
+            });
+        }
+
+        const fontSelect = container.querySelector('#ms-event-font-family');
+        if (fontSelect) {
+            fontSelect.addEventListener('change', () => {
+                block.content.fontFamily = fontSelect.value;
+                recordEditorHistory({ immediate: false });
+                renderBuilderCanvas();
             });
         }
     }
