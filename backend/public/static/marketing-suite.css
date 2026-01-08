@@ -930,7 +930,7 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  background: #f1f5f9;
+  background: transparent;
   display: grid;
   place-items: center;
   color: var(--ms-text);
@@ -997,13 +997,21 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: #f1f5f9;
+  background: transparent;
   display: grid;
   place-items: center;
   color: var(--ms-text);
   text-decoration: none;
 }
 
+.ms-social-link svg,
+.ms-social-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
 .ms-social-link.is-empty {
   opacity: 0.6;
+  background: #f1f5f9;
 }

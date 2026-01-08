@@ -40,46 +40,46 @@ const SOCIAL_ICON_LIBRARY = {
   facebook: {
     label: 'Facebook',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path d="M13.7 8.5h2.1V6h-2.1c-2.1 0-3.6 1.5-3.6 3.6v1.3H8.4v2.7h1.7V19h3v-5.4h2.2l.4-2.7H13v-1.2c0-.7.4-1.2 1.3-1.2z" fill="#FFFFFF"/></svg>',
   },
   instagram: {
     label: 'Instagram',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="3"/><circle cx="17" cy="7" r="1"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="ig-gradient" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F58529"/><stop offset="0.3" stop-color="#FEDA77"/><stop offset="0.6" stop-color="#DD2A7B"/><stop offset="1" stop-color="#515BD4"/></linearGradient></defs><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#ig-gradient)"/><rect x="6.5" y="6.5" width="11" height="11" rx="3.5" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="16.2" cy="7.8" r="1.2" fill="#FFFFFF"/></svg>',
   },
   x: {
     label: 'X (Twitter)',
-    svg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l16 16M20 4L4 20"/></svg>',
+    svg: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#000000"/><path d="M7 6h3.2l2.4 3.2L15.2 6h2.8l-4.2 5.1L18 18h-3.2l-2.6-3.5L9.3 18H6.5l4.6-5.7L7 6z" fill="#FFFFFF"/></svg>',
   },
   tiktok: {
     label: 'TikTok',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5v10a4 4 0 1 1-3-3.87"/><path d="M11 5c2.5 3 5 4 8 4"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#000000"/><path d="M13.6 6.4v7.1a2.7 2.7 0 1 1-2-2.6V8.6l4.8 1.4V8.1z" fill="#FFFFFF"/><path d="M12.9 6v7a2.7 2.7 0 0 1-2.1 2.6 2.7 2.7 0 0 0 3.2-2.7V6.4z" fill="#25F4EE" opacity="0.9"/><path d="M14.2 6.8v7a2.7 2.7 0 0 1-2.2 2.7 2.7 2.7 0 0 0 3.3-2.7V7.2z" fill="#FE2C55" opacity="0.9"/></svg>',
   },
   youtube: {
     label: 'YouTube',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="10" rx="2"/><polygon points="10 9 15 12 10 15 10 9"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="#FF0000"/><polygon points="10 9 16 12 10 15" fill="#FFFFFF"/></svg>',
   },
   linkedin: {
     label: 'LinkedIn',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="8" y1="11" x2="8" y2="16"/><line x1="8" y1="8" x2="8" y2="8"/><path d="M12 16v-5a2 2 0 0 1 4 0v5"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#0A66C2"/><circle cx="8.3" cy="7.7" r="1.2" fill="#FFFFFF"/><rect x="7.2" y="9.5" width="2.2" height="7" fill="#FFFFFF"/><path d="M11.4 9.5h2.2v1c.4-.7 1.3-1.2 2.6-1.2 2 0 3.3 1.3 3.3 3.5v3.7h-2.2v-3.4c0-1.1-.6-1.9-1.7-1.9-1.1 0-1.9.8-1.9 1.9v3.4h-2.2z" fill="#FFFFFF"/></svg>',
   },
   pinterest: {
     label: 'Pinterest',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 20l1.5-6"/><path d="M10.5 9.5a2.5 2.5 0 1 1 3.5 2.3"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#E60023"/><path d="M12.4 6.4c-3 0-5.4 2.1-5.4 5 0 2 1.2 3.6 2.8 4.2-.1-.4-.1-1 .1-1.5l.8-3.1c-.2-.4-.3-.9-.3-1.4 0-1.3.8-2.3 1.9-2.3.9 0 1.3.7 1.3 1.6 0 1-.6 2.5-.9 3.8-.2 1 .4 1.8 1.4 1.8 1.7 0 2.9-1.8 2.9-4.1 0-2.2-1.6-3.9-4-3.9z" fill="#FFFFFF"/></svg>',
   },
   snapchat: {
     label: 'Snapchat',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5a4 4 0 0 1 4 4v2c0 1.1.9 2 2 2"/><path d="M6 13a2 2 0 0 0 2-2V9a4 4 0 0 1 8 0v2a2 2 0 0 0 2 2"/><path d="M8 17c1.5 1.3 2.5 2 4 2s2.5-.7 4-2"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#FFFC00"/><path d="M12 6.5c-1.9 0-3.4 1.6-3.4 3.5v2c0 1-.7 1.8-1.6 2 1 .7 1.8 1 2.7 1.1.4 1.1 1.3 1.9 2.3 1.9s1.9-.8 2.3-1.9c.9-.1 1.7-.4 2.7-1.1-.9-.2-1.6-1-1.6-2v-2c0-1.9-1.5-3.5-3.4-3.5z" fill="#FFFFFF" stroke="#1F2937" stroke-width="0.6"/></svg>',
   },
   website: {
     label: 'Website',
     svg:
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#64748B"/><circle cx="12" cy="12" r="7" fill="none" stroke="#FFFFFF" stroke-width="1.6"/><path d="M5 12h14" stroke="#FFFFFF" stroke-width="1.6"/><path d="M12 5c2.2 2.6 2.2 11.4 0 14" stroke="#FFFFFF" stroke-width="1.6"/></svg>',
   },
 };
 
