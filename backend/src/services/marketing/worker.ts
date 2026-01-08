@@ -23,7 +23,7 @@ import {
 import prisma from '../../lib/prisma.js';
 import { isWithinIntelligentSendWindow, runIntelligentCampaign } from './intelligent/runner.js';
 import { getRemainingTickets } from './intelligent/availability.js';
-import { buildDefaultMergeContext, renderMergeTags } from '../../lib/email-marketing/merge-tags.js';
+import { buildDefaultMergeContext, renderMergeTags, type MergeContext } from '../../lib/email-marketing/merge-tags.js';
 import { renderCompiledTemplate } from './template-compiler.js';
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import { createPreferencesToken } from '../../lib/email-marketing/preferences.js';
@@ -117,10 +117,26 @@ function shouldRunForDay(lastRunAt: Date | null, now: Date) {
   );
 }
 
+type IntelligentConfigBase = Prisma.MarketingIntelligentCampaignGetPayload<{
+  select: { id: true; tenantId: true; kind: true; lastRunAt: true; configJson: true; templateId: true };
+}>;
+
+type IntelligentConfigWithTemplate = Prisma.MarketingIntelligentCampaignGetPayload<{
+  include: { template: true };
+}>;
+
+async function fetchIntelligentConfigsByStrategy(
+  strategyKey: IntelligentStrategyKey,
+  options?: { includeTemplate?: false }
+): Promise<IntelligentConfigBase[]>;
+async function fetchIntelligentConfigsByStrategy(
+  strategyKey: IntelligentStrategyKey,
+  options: { includeTemplate: true }
+): Promise<IntelligentConfigWithTemplate[]>;
 async function fetchIntelligentConfigsByStrategy(
   strategyKey: IntelligentStrategyKey,
   options: { includeTemplate?: boolean } = {}
-) {
+): Promise<IntelligentConfigBase[] | IntelligentConfigWithTemplate[]> {
   const types = await prisma.marketingIntelligentCampaignType.findMany({
     where: { strategyKey },
     select: { tenantId: true, key: true },
@@ -651,7 +667,7 @@ async function processAddonUpsellIntelligentCampaigns() {
         const unsubscribeUrl = buildUnsubscribeUrl(tenant, email);
         const preferencesUrl = buildPreferencesUrl(tenant, email);
 
-        const baseMergeContext = buildDefaultMergeContext({
+        const baseMergeContext: MergeContext = buildDefaultMergeContext({
           contact: {
             firstName: contact.firstName || '',
             lastName: contact.lastName || '',

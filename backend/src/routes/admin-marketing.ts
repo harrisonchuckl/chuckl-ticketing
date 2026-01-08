@@ -1243,7 +1243,7 @@ router.get('/api/marketing/intelligent', requireAdminOrOrganiser, async (req, re
   console.info('[marketing:intelligent:get] request', { tenantId, actor: actorFrom(req) });
   const types = await ensureIntelligentTypes(tenantId);
   const configMap = await ensureIntelligentCampaignConfigs(tenantId, types);
-  const builtInOrder = BUILT_IN_INTELLIGENT_TYPES.map((type) => type.key);
+  const builtInOrder: string[] = BUILT_IN_INTELLIGENT_TYPES.map((type) => type.key);
   const builtInSet = new Set(builtInOrder);
   const orderedTypes = [
     ...types
