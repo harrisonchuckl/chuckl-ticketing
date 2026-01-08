@@ -2787,131 +2787,333 @@ router.get(
       cursor:pointer;
     }
     .ps-create-page{
-      max-width:980px;
+      background:#f5f8fc;
+      min-height:100%;
+    }
+    .ps-create-shell{
+      max-width:1100px;
       margin:0 auto;
+      padding:60px 32px;
       display:flex;
       flex-direction:column;
-      gap:16px;
+      gap:32px;
     }
-    .ps-create-hero{
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:16px;
-    }
-    .ps-eyebrow{
-      text-transform:uppercase;
-      letter-spacing:.08em;
-      font-size:11px;
-      font-weight:700;
-      color:var(--muted);
-      margin-bottom:6px;
-    }
-    .ps-section{
+    .ps-header-section{
       display:flex;
       flex-direction:column;
       gap:12px;
     }
-    .ps-section-header{
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:12px;
+    .ps-header-title{
+      font-size:52px;
+      font-weight:800;
+      color:#000000;
+      margin:0;
+      letter-spacing:-0.02em;
     }
-    .ps-section-header .section-title{
+    .ps-header-subtitle{
+      font-size:28px;
       font-weight:700;
-      font-size:16px;
-      margin-bottom:4px;
+      color:#1e293b;
+      margin:0;
     }
-    .ps-chip{
-      background:#e6f6f4;
-      color:#0f766e;
-      font-size:11px;
-      font-weight:700;
-      border-radius:999px;
-      padding:4px 10px;
-      white-space:nowrap;
+    .ps-header-desc{
+      font-size:20px;
+      color:#64748b;
+      line-height:1.6;
+      margin:0 0 12px 0;
     }
-    .ps-upload-card{
+    .ps-nav-actions{
       display:flex;
-      align-items:center;
-      justify-content:space-between;
       gap:12px;
-      padding:12px;
-      border:1px dashed var(--border);
-      border-radius:12px;
-      background:#f8fafc;
       flex-wrap:wrap;
     }
-    .ps-row-list{
-      display:grid;
-      gap:8px;
+    .ps-nav-btn{
+      background:#ffffff;
+      border:1px solid #cbd5e0;
+      color:#475569;
+      font-size:15px;
+      font-weight:600;
+      padding:12px 24px;
+      border-radius:12px;
+      cursor:pointer;
+      transition:all .3s ease;
+    }
+    .ps-nav-btn:hover{
+      background:#f8fafc;
+      border-color:rgba(0,159,227,.5);
+      color:#009fe3;
+      transform:translateY(-2px);
     }
     .ps-form-grid{
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-      gap:12px;
+      grid-template-columns:1fr 1fr;
+      gap:24px;
     }
-    .ps-field{
-      display:grid;
-      gap:6px;
-      font-size:13px;
-      font-weight:600;
-      color:var(--text);
+    .ps-section-card{
+      background:#ffffff;
+      border:1px solid #e2e8f0;
+      border-radius:20px;
+      padding:36px;
+      position:relative;
+      overflow:hidden;
+      transition:all .3s ease;
     }
-    .ps-field span{
-      font-size:12px;
-      color:var(--muted);
-      text-transform:uppercase;
-      letter-spacing:.04em;
+    .ps-section-card:hover{
+      border-color:rgba(0,159,227,.3);
+      box-shadow:0 8px 24px rgba(0,159,227,.08);
     }
-    .ps-field-wide{
+    .ps-section-card.full{
       grid-column:1 / -1;
     }
-    .ps-check{
+    .ps-section-number{
+      position:absolute;
+      top:20px;
+      right:24px;
+      font-size:72px;
+      font-weight:800;
+      color:rgba(0,159,227,.05);
+      line-height:1;
+      user-select:none;
+    }
+    .ps-section-title{
+      font-size:22px;
+      font-weight:700;
+      color:#1e293b;
+      margin:0 0 8px 0;
+    }
+    .ps-section-desc{
+      font-size:14px;
+      color:#64748b;
+      margin:0 0 28px 0;
+      line-height:1.5;
+    }
+    .ps-form-field{
+      margin-bottom:20px;
+      display:block;
+    }
+    .ps-form-label{
+      display:block;
+      font-size:13px;
+      font-weight:600;
+      color:#475569;
+      margin-bottom:10px;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    .ps-input,
+    .ps-select,
+    .ps-textarea{
+      width:100%;
+      padding:14px 18px;
+      font-size:15px;
+      background:#f8fafc;
+      border:1px solid #cbd5e0;
+      border-radius:10px;
+      color:#1e293b;
+      transition:all .3s ease;
+      font-family:inherit;
+    }
+    .ps-input::placeholder,
+    .ps-textarea::placeholder{
+      color:#94a3b8;
+    }
+    .ps-input:focus,
+    .ps-select:focus,
+    .ps-textarea:focus{
+      outline:none;
+      border-color:#009fe3;
+      background:#ffffff;
+      box-shadow:0 0 0 4px rgba(0,159,227,.1);
+    }
+    .ps-textarea{
+      resize:vertical;
+      min-height:140px;
+    }
+    .ps-form-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+      margin-bottom:20px;
+    }
+    .ps-upload-zone{
+      border:2px dashed rgba(0,159,227,.4);
+      border-radius:16px;
+      padding:60px 24px;
+      text-align:center;
+      background:rgba(0,159,227,.03);
+      cursor:pointer;
+      transition:all .3s ease;
+    }
+    .ps-upload-zone:hover{
+      border-color:#009fe3;
+      background:rgba(0,159,227,.08);
+      transform:scale(1.01);
+    }
+    .ps-upload-icon{
+      font-size:64px;
+      margin-bottom:16px;
+      opacity:.4;
+      color:#009fe3;
+    }
+    .ps-upload-text{
+      font-size:18px;
+      font-weight:600;
+      color:#1e293b;
+      margin-bottom:8px;
+    }
+    .ps-upload-hint{
+      font-size:14px;
+      color:#64748b;
+    }
+    .ps-inline-list{
+      display:grid;
+      gap:12px;
+      margin-top:16px;
+    }
+    .ps-inline-row{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+      gap:10px;
+      align-items:center;
+    }
+    .ps-inline-row .btn{
+      justify-self:start;
+    }
+    .ps-inline-btn{
+      background:#ffffff;
+      border:1px solid #cbd5e0;
+      color:#475569;
+      font-size:13px;
+      font-weight:600;
+      padding:10px 16px;
+      border-radius:10px;
+      cursor:pointer;
+      transition:all .2s ease;
+    }
+    .ps-inline-btn:hover{
+      background:#f8fafc;
+      border-color:#94a3b8;
+    }
+    .ps-checkbox{
       display:flex;
       align-items:center;
-      gap:8px;
-      font-size:14px;
+      gap:12px;
+      margin-top:16px;
+      padding:12px;
+      background:rgba(0,159,227,.05);
+      border-radius:8px;
+      cursor:pointer;
+      transition:all .2s ease;
+      font-size:15px;
+      color:#475569;
+      font-weight:500;
+    }
+    .ps-checkbox:hover{
+      background:rgba(0,159,227,.1);
+    }
+    .ps-checkbox input[type="checkbox"]{
+      width:20px;
+      height:20px;
+      cursor:pointer;
+      accent-color:#009fe3;
+    }
+    .ps-variant-btn{
+      background:rgba(0,159,227,.08);
+      border:2px dashed rgba(0,159,227,.4);
+      color:#009fe3;
+      font-size:15px;
       font-weight:600;
-      color:var(--text);
-      padding-top:8px;
+      padding:14px 28px;
+      border-radius:10px;
+      cursor:pointer;
+      transition:all .3s ease;
+      width:100%;
+    }
+    .ps-variant-btn:hover{
+      background:rgba(0,159,227,.15);
+      border-color:#009fe3;
     }
     .ps-tip-card{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      padding:12px 16px;
-      border-radius:14px;
-      background:#e6f6f4;
-      color:#0f766e;
+      background:linear-gradient(135deg, rgba(0,159,227,.08) 0%, rgba(79,172,254,.08) 100%);
+      border:1px solid rgba(0,159,227,.2);
+      border-radius:16px;
+      padding:24px 28px;
     }
     .ps-tip-title{
+      font-size:16px;
       font-weight:700;
-      margin-bottom:4px;
+      color:#1e293b;
+      margin-bottom:8px;
     }
     .ps-tip-text{
-      font-size:13px;
+      font-size:14px;
+      color:#475569;
+      line-height:1.6;
+      margin-bottom:12px;
     }
     .ps-tip-link{
-      font-weight:700;
-      white-space:nowrap;
+      color:#009fe3;
+      font-size:14px;
+      font-weight:600;
+      text-decoration:none;
+    }
+    .ps-tip-link:hover{
+      color:#4facfe;
     }
     .ps-action-bar{
       display:flex;
-      align-items:center;
-      gap:12px;
+      justify-content:center;
+      gap:16px;
+      margin-top:16px;
       flex-wrap:wrap;
     }
-    @media (max-width:720px){
-      .ps-create-hero{
-        flex-direction:column;
-        align-items:flex-start;
+    .ps-btn-cancel{
+      background:#ffffff;
+      border:1px solid #cbd5e0;
+      color:#475569;
+      font-size:16px;
+      font-weight:600;
+      padding:16px 40px;
+      border-radius:12px;
+      cursor:pointer;
+      transition:all .3s ease;
+    }
+    .ps-btn-cancel:hover{
+      background:#f8fafc;
+      border-color:#94a3b8;
+      transform:translateY(-2px);
+    }
+    .ps-btn-primary{
+      background:linear-gradient(135deg, #009fe3 0%, #4facfe 100%);
+      border:none;
+      color:#ffffff;
+      font-size:16px;
+      font-weight:700;
+      padding:16px 48px;
+      border-radius:12px;
+      cursor:pointer;
+      transition:all .3s ease;
+    }
+    .ps-btn-primary:hover{
+      transform:translateY(-2px);
+    }
+    .ps-save-msg{
+      text-align:center;
+      color:#64748b;
+      font-size:14px;
+    }
+    @media (max-width:768px){
+      .ps-form-grid{
+        grid-template-columns:1fr;
       }
-      .ps-tip-card{
-        flex-direction:column;
-        align-items:flex-start;
+      .ps-form-row{
+        grid-template-columns:1fr;
+      }
+      .ps-header-title{
+        font-size:36px;
+      }
+      .ps-create-shell{
+        padding:40px 20px;
       }
     }
     .toast{
@@ -15176,151 +15378,147 @@ function renderInterests(customer){
     var isEdit = !!productId;
     main.innerHTML = ''
       + '<div class="ps-create-page">'
-      +   '<div class="card ps-create-hero">'
-      +     '<div>'
-      +       '<div class="ps-eyebrow">Product store</div>'
-      +       '<div class="title">' + (isEdit ? 'Edit product' : 'Create product') + '</div>'
-      +       '<div class="muted">Keep it simple: add photos, a clear title, and pricing. You can refine details anytime.</div>'
-      +     '</div>'
-      +     '<div class="row" style="gap:8px;">'
-      +       (isEdit ? '' : '<button class="btn" id="ps_prod_import">Import from Printful</button>')
-      +       '<button class="btn" id="ps_prod_back">Back</button>'
-      +     '</div>'
-      +   '</div>'
-      +   '<div class="card ps-section">'
-      +     '<div class="ps-section-header">'
-      +       '<div>'
-      +         '<div class="section-title">Photos</div>'
-      +         '<div class="muted">First photo becomes the cover image.</div>'
+      +   '<div class="ps-create-shell">'
+      +     '<div class="ps-header-section">'
+      +       '<h1 class="ps-header-title">Product Store</h1>'
+      +       '<h2 class="ps-header-subtitle">' + (isEdit ? 'Edit Product' : 'Create Product') + '</h2>'
+      +       '<p class="ps-header-desc">Keep it simple: add photos, a clear title, and pricing. You can refine details anytime.</p>'
+      +       '<div class="ps-nav-actions">'
+      +         '<button class="ps-nav-btn" id="ps_prod_back">← Back</button>'
+      +         (isEdit ? '' : '<button class="ps-nav-btn" id="ps_prod_import">Import from Printful</button>')
       +       '</div>'
-      +       '<span class="ps-chip">Step 1</span>'
-      +     '</div>'
-      +     '<div class="ps-upload-card">'
-      +       '<button class="btn p" id="ps_add_image">+ Add photos</button>'
-      +       '<div class="muted">Use bright, square images for best results.</div>'
-      +     '</div>'
-      +     '<div id="ps_image_rows" class="ps-row-list"></div>'
-      +   '</div>'
-      +   '<div class="card ps-section">'
-      +     '<div class="ps-section-header">'
-      +       '<div>'
-      +         '<div class="section-title">Listing details</div>'
-      +         '<div class="muted">Help buyers understand what they’re getting.</div>'
-      +       '</div>'
-      +       '<span class="ps-chip">Step 2</span>'
       +     '</div>'
       +     '<div class="ps-form-grid">'
-      +       '<label class="ps-field">'
-      +         '<span>Title</span>'
-      +         '<input id="ps_prod_title" class="input" placeholder="Title" />'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Slug</span>'
-      +         '<input id="ps_prod_slug" class="input" placeholder="Slug" />'
-      +       '</label>'
-      +       '<label class="ps-field ps-field-wide">'
-      +         '<span>Description</span>'
-      +         '<textarea id="ps_prod_desc" class="input" placeholder="Describe the product"></textarea>'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Category</span>'
-      +         '<select id="ps_prod_category" class="input">'
-      +           '<option value="MERCH">Merch</option>'
-      +           '<option value="ADDON">Add-on</option>'
-      +           '<option value="DIGITAL">Digital</option>'
-      +           '<option value="DONATION">Donation</option>'
-      +           '<option value="VOUCHER">Voucher</option>'
-      +         '</select>'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Fulfilment</span>'
-      +         '<select id="ps_prod_fulfilment" class="input">'
-      +           '<option value="NONE">None</option>'
-      +           '<option value="SHIPPING">Shipping</option>'
-      +           '<option value="COLLECT">Collect</option>'
-      +           '<option value="EMAIL">Email</option>'
-      +           '<option value="PRINTFUL">Printful</option>'
-      +         '</select>'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Status</span>'
-      +         '<select id="ps_prod_status" class="input">'
-      +           '<option value="DRAFT">Draft</option>'
-      +           '<option value="ACTIVE">Active</option>'
-      +           '<option value="ARCHIVED">Archived</option>'
-      +         '</select>'
-      +       '</label>'
-      +     '</div>'
-      +   '</div>'
-      +   '<div class="card ps-section">'
-      +     '<div class="ps-section-header">'
-      +       '<div>'
-      +         '<div class="section-title">Pricing & inventory</div>'
-      +         '<div class="muted">Set a simple price or allow custom amounts.</div>'
+      +       '<div class="ps-section-card full">'
+      +         '<div class="ps-section-number">01</div>'
+      +         '<h3 class="ps-section-title">Photos</h3>'
+      +         '<p class="ps-section-desc">First photo becomes the cover image.</p>'
+      +         '<div class="ps-upload-zone" id="ps_add_image">'
+      +           '<div class="ps-upload-icon">+</div>'
+      +           '<div class="ps-upload-text">Add photos</div>'
+      +           '<div class="ps-upload-hint">Use bright, square images for best results</div>'
+      +         '</div>'
+      +         '<div id="ps_image_rows" class="ps-inline-list"></div>'
       +       '</div>'
-      +       '<span class="ps-chip">Step 3</span>'
-      +     '</div>'
-      +     '<div class="ps-form-grid">'
-      +       '<label class="ps-field">'
-      +         '<span>Price (pence)</span>'
-      +         '<input id="ps_prod_price" class="input" placeholder="Price (pence)" type="number" />'
-      +       '</label>'
-      +       '<label class="ps-check">'
-      +         '<input type="checkbox" id="ps_prod_custom" /> Allow custom amount'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Inventory mode</span>'
-      +         '<select id="ps_prod_inventory" class="input">'
-      +           '<option value="UNLIMITED">Unlimited</option>'
-      +           '<option value="TRACKED">Tracked</option>'
-      +         '</select>'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Stock count</span>'
-      +         '<input id="ps_prod_stock" class="input" placeholder="Stock count" type="number" />'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Low stock threshold</span>'
-      +         '<input id="ps_prod_low_stock" class="input" placeholder="Low stock threshold" type="number" />'
-      +       '</label>'
-      +       '<label class="ps-check">'
-      +         '<input type="checkbox" id="ps_prod_preorder" /> Preorder enabled'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Preorder close (YYYY-MM-DD)</span>'
-      +         '<input id="ps_prod_preorder_close" class="input" placeholder="Preorder close (YYYY-MM-DD)" />'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Max per order</span>'
-      +         '<input id="ps_prod_max_order" class="input" placeholder="Max per order" type="number" />'
-      +       '</label>'
-      +       '<label class="ps-field">'
-      +         '<span>Max per ticket</span>'
-      +         '<input id="ps_prod_max_ticket" class="input" placeholder="Max per ticket" type="number" />'
-      +       '</label>'
-      +     '</div>'
-      +   '</div>'
-      +   '<div class="card ps-section">'
-      +     '<div class="ps-section-header">'
-      +       '<div>'
-      +         '<div class="section-title">Variants</div>'
-      +         '<div class="muted">Add options like sizes or bundles.</div>'
+      +       '<div class="ps-section-card full">'
+      +         '<div class="ps-section-number">02</div>'
+      +         '<h3 class="ps-section-title">Listing Details</h3>'
+      +         '<p class="ps-section-desc">Help buyers understand what they’re getting.</p>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Title</span>'
+      +           '<input id="ps_prod_title" class="ps-input" placeholder="Enter product title" />'
+      +         '</label>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Slug</span>'
+      +           '<input id="ps_prod_slug" class="ps-input" placeholder="product-url-slug" />'
+      +         '</label>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Description</span>'
+      +           '<textarea id="ps_prod_desc" class="ps-textarea" placeholder="Describe the product in detail..."></textarea>'
+      +         '</label>'
+      +         '<div class="ps-form-row">'
+      +           '<label>'
+      +             '<span class="ps-form-label">Category</span>'
+      +             '<select id="ps_prod_category" class="ps-select">'
+      +               '<option value="MERCH">Merch</option>'
+      +               '<option value="ADDON">Add-on</option>'
+      +               '<option value="DIGITAL">Digital</option>'
+      +               '<option value="DONATION">Donation</option>'
+      +               '<option value="VOUCHER">Voucher</option>'
+      +             '</select>'
+      +           '</label>'
+      +           '<label>'
+      +             '<span class="ps-form-label">Fulfilment</span>'
+      +             '<select id="ps_prod_fulfilment" class="ps-select">'
+      +               '<option value="NONE">None</option>'
+      +               '<option value="SHIPPING">Shipping</option>'
+      +               '<option value="COLLECT">Collect</option>'
+      +               '<option value="EMAIL">Email</option>'
+      +               '<option value="PRINTFUL">Printful</option>'
+      +             '</select>'
+      +           '</label>'
+      +         '</div>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Status</span>'
+      +           '<select id="ps_prod_status" class="ps-select">'
+      +             '<option value="DRAFT">Draft</option>'
+      +             '<option value="ACTIVE">Active</option>'
+      +             '<option value="ARCHIVED">Archived</option>'
+      +           '</select>'
+      +         '</label>'
       +       '</div>'
-      +       '<span class="ps-chip">Optional</span>'
+      +       '<div class="ps-section-card">'
+      +         '<div class="ps-section-number">03</div>'
+      +         '<h3 class="ps-section-title">Pricing</h3>'
+      +         '<p class="ps-section-desc">Set a simple price or allow custom amounts.</p>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Price (pence)</span>'
+      +           '<input id="ps_prod_price" class="ps-input" placeholder="1000" type="number" />'
+      +         '</label>'
+      +         '<label class="ps-checkbox">'
+      +           '<input type="checkbox" id="ps_prod_custom" /> Allow custom amount'
+      +         '</label>'
+      +       '</div>'
+      +       '<div class="ps-section-card">'
+      +         '<div class="ps-section-number">04</div>'
+      +         '<h3 class="ps-section-title">Inventory</h3>'
+      +         '<p class="ps-section-desc">Manage stock levels and availability.</p>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Inventory Mode</span>'
+      +           '<select id="ps_prod_inventory" class="ps-select">'
+      +             '<option value="UNLIMITED">Unlimited</option>'
+      +             '<option value="TRACKED">Tracked</option>'
+      +           '</select>'
+      +         '</label>'
+      +         '<div class="ps-form-row">'
+      +           '<label>'
+      +             '<span class="ps-form-label">Stock Count</span>'
+      +             '<input id="ps_prod_stock" class="ps-input" placeholder="100" type="number" />'
+      +           '</label>'
+      +           '<label>'
+      +             '<span class="ps-form-label">Low Stock Alert</span>'
+      +             '<input id="ps_prod_low_stock" class="ps-input" placeholder="10" type="number" />'
+      +           '</label>'
+      +         '</div>'
+      +         '<label class="ps-checkbox">'
+      +           '<input type="checkbox" id="ps_prod_preorder" /> Enable preorder'
+      +         '</label>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Preorder Close Date</span>'
+      +           '<input id="ps_prod_preorder_close" class="ps-input" placeholder="2024-12-31" />'
+      +         '</label>'
+      +       '</div>'
+      +       '<div class="ps-section-card">'
+      +         '<div class="ps-section-number">05</div>'
+      +         '<h3 class="ps-section-title">Order Limits</h3>'
+      +         '<p class="ps-section-desc">Set purchase restrictions per order and ticket.</p>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Max per Order</span>'
+      +           '<input id="ps_prod_max_order" class="ps-input" placeholder="10" type="number" />'
+      +         '</label>'
+      +         '<label class="ps-form-field">'
+      +           '<span class="ps-form-label">Max per Ticket</span>'
+      +           '<input id="ps_prod_max_ticket" class="ps-input" placeholder="5" type="number" />'
+      +         '</label>'
+      +       '</div>'
+      +       '<div class="ps-section-card">'
+      +         '<div class="ps-section-number">06</div>'
+      +         '<h3 class="ps-section-title">Variants</h3>'
+      +         '<p class="ps-section-desc">Add options like sizes or bundles. <span style="opacity:0.5;">Optional</span></p>'
+      +         '<div id="ps_variant_rows" class="ps-inline-list"></div>'
+      +         '<button class="ps-variant-btn" id="ps_add_variant">+ Add variant</button>'
+      +       '</div>'
+      +       '<div class="ps-section-card full ps-tip-card">'
+      +         '<div class="ps-tip-title">Tip: Keep it punchy</div>'
+      +         '<div class="ps-tip-text">Short titles and clear pricing help buyers check out faster. Focus on what makes your product unique in just a few words.</div>'
+      +         '<a href="#" class="ps-tip-link">Learn more →</a>'
+      +       '</div>'
       +     '</div>'
-      +     '<div id="ps_variant_rows" class="ps-row-list"></div>'
-      +     '<button class="btn" id="ps_add_variant">Add variant</button>'
-      +   '</div>'
-      +   '<div class="ps-tip-card">'
-      +     '<div>'
-      +       '<div class="ps-tip-title">Tip: Keep it punchy</div>'
-      +       '<div class="ps-tip-text">Short titles and clear pricing help buyers check out faster.</div>'
+      +     '<div class="ps-action-bar">'
+      +       '<button class="ps-btn-cancel" id="ps_prod_cancel">Cancel</button>'
+      +       '<button class="ps-btn-primary" id="ps_prod_save">' + (isEdit ? 'Save Product' : 'Create Product') + '</button>'
       +     '</div>'
-      +     '<span class="ps-tip-link">Learn more</span>'
-      +   '</div>'
-      +   '<div class="ps-action-bar">'
-      +     '<button class="btn p" id="ps_prod_save">Save product</button>'
-      +     '<div class="muted" id="ps_prod_msg"></div>'
+      +     '<div class="ps-save-msg" id="ps_prod_msg"></div>'
       +   '</div>'
       + '</div>';
 
@@ -15335,15 +15533,13 @@ function renderInterests(customer){
 
     function addVariantRow(data){
       var row = document.createElement('div');
-      row.className = 'row';
-      row.style.gap = '8px';
-      row.style.marginTop = '8px';
+      row.className = 'ps-inline-row';
       row.innerHTML = ''
-        + '<input class="input" placeholder="Title" data-field="title" />'
-        + '<input class="input" placeholder="SKU" data-field="sku" />'
-        + '<input class="input" placeholder="Price override" type="number" data-field="price" />'
-        + '<input class="input" placeholder="Stock override" type="number" data-field="stock" />'
-        + '<button class="btn" data-remove>Remove</button>';
+        + '<input class="ps-input" placeholder="Title" data-field="title" />'
+        + '<input class="ps-input" placeholder="SKU" data-field="sku" />'
+        + '<input class="ps-input" placeholder="Price override" type="number" data-field="price" />'
+        + '<input class="ps-input" placeholder="Stock override" type="number" data-field="stock" />'
+        + '<button class="ps-inline-btn" data-remove>Remove</button>';
       $('#ps_variant_rows').appendChild(row);
       if (data){
         row.querySelector('[data-field="title"]').value = data.title || '';
@@ -15356,13 +15552,11 @@ function renderInterests(customer){
 
     function addImageRow(data){
       var row = document.createElement('div');
-      row.className = 'row';
-      row.style.gap = '8px';
-      row.style.marginTop = '8px';
+      row.className = 'ps-inline-row';
       row.innerHTML = ''
-        + '<input class="input" placeholder="Image URL" data-field="url" />'
-        + '<input class="input" placeholder="Sort order" type="number" data-field="sort" />'
-        + '<button class="btn" data-remove>Remove</button>';
+        + '<input class="ps-input" placeholder="Image URL" data-field="url" />'
+        + '<input class="ps-input" placeholder="Sort order" type="number" data-field="sort" />'
+        + '<button class="ps-inline-btn" data-remove>Remove</button>';
       $('#ps_image_rows').appendChild(row);
       if (data){
         row.querySelector('[data-field="url"]').value = data.url || '';
@@ -15374,6 +15568,10 @@ function renderInterests(customer){
     $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
     $('#ps_add_image').addEventListener('click', function(){ addImageRow(); });
     $('#ps_prod_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+    var cancelBtn = $('#ps_prod_cancel');
+    if (cancelBtn){
+      cancelBtn.addEventListener('click', function(){ go('/admin/ui/product-store'); });
+    }
     var importBtn = $('#ps_prod_import');
     if (importBtn){
       importBtn.addEventListener('click', async function(){
