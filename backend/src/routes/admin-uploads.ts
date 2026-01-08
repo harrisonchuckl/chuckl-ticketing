@@ -59,6 +59,9 @@ router.post(["/", "/poster"], requireAdminOrOrganiser, async (req: Request, res:
     return res.json({ ok: true, url: `${put.publicBase}/${key}` });
   } catch (err) {
     console.error("poster upload failed", err);
+    if (err instanceof Error && err.message === "File too large") {
+      return res.status(413).json({ ok: false, error: "File too large" });
+    }
     return res.status(500).json({ ok: false, error: "Upload error" });
   }
 });
