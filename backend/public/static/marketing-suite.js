@@ -514,6 +514,25 @@ async function renderIntelligentCampaigns() {
       { key: 'ADDON_UPSELL', label: 'Addon upsell' },
     ];
 
+    function resolveIntelligentTagRequirements(kind, strategyKey) {
+      const isAddon = kind === 'ADDON_UPSELL' || strategyKey === 'ADDON_UPSELL';
+      if (isAddon) {
+        return {
+          required: ['{{recommendedAddonsHtml}}'],
+          optional: ['{{recommendedShowsHtml}}', '{{contact.firstName}}'],
+        };
+      }
+      return {
+        required: ['{{recommendedShowsHtml}}'],
+        optional: ['{{contact.firstName}}'],
+      };
+    }
+
+    function renderTagList(tags) {
+      if (!tags.length) return '<span class="ms-muted">None</span>';
+      return tags.map((tag) => `<code>${escapeHtml(tag)}</code>`).join(', ');
+    }
+
     function normalizeConfig(configJson) {
       const fallback = { horizonDays: 90, maxPer30d: 3 };
       if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) return fallback;
@@ -544,6 +563,7 @@ async function renderIntelligentCampaigns() {
                 .map((item) => {
                   const config = configMap.get(item.kind) || {};
                   const configValues = normalizeConfig(config.configJson);
+                  const tagRequirements = resolveIntelligentTagRequirements(item.kind, item.strategyKey);
                   return `
                     <div class="ms-card" data-intelligent-card="${item.kind}" style="margin:0;">
                       <div class="ms-toolbar" style="justify-content:space-between;">
@@ -577,6 +597,24 @@ async function renderIntelligentCampaigns() {
                           `<input type="number" min="1" data-intelligent-horizon value="${configValues.horizonDays}" />`,
                           'How far ahead to look for shows.'
                         )}
+                      </div>
+                      <div style="margin-top:12px;">
+                        <div style="font-weight:600;">Required blocks</div>
+                        <div class="ms-muted" style="margin-top:4px;">
+                          <div><strong>Required:</strong> ${renderTagList(tagRequirements.required)}</div>
+                          <div><strong>Optional:</strong> ${renderTagList(tagRequirements.optional)}</div>
+                        </div>
+                        <div class="ms-muted" data-intelligent-template-check style="margin-top:8px;">
+                          Select a template to check required blocks.
+                        </div>
+                        <div class="ms-toolbar" style="justify-content:flex-start;margin-top:8px;gap:8px;flex-wrap:wrap;">
+                          <button class="ms-secondary" data-intelligent-template-open disabled>Open template</button>
+                          <button class="ms-primary" data-intelligent-template-insert disabled>Insert blocks into template</button>
+                        </div>
+                        <div
+                          data-intelligent-template-error
+                          style="display:none;border:1px solid #f87171;background:#fff7f7;padding:8px;border-radius:10px;margin-top:8px;font-size:12px;"
+                        ></div>
                       </div>
                       <div class="ms-toolbar" style="justify-content:flex-end;margin-top:8px;">
                         <button class="ms-primary" data-intelligent-save>Save</button>
@@ -781,9 +819,107 @@ async function renderIntelligentCampaigns() {
       const horizonInput = card.querySelector('[data-intelligent-horizon]');
       const statusEl = card.querySelector('[data-intelligent-status]');
       const saveButton = card.querySelector('[data-intelligent-save]');
+      const templateCheckEl = card.querySelector('[data-intelligent-template-check]');
+      const templateErrorEl = card.querySelector('[data-intelligent-template-error]');
+      const insertButton = card.querySelector('[data-intelligent-template-insert]');
+      const openButton = card.querySelector('[data-intelligent-template-open]');
 
       const config = configMap.get(kind) || {};
       if (templateSelect && config.templateId) templateSelect.value = config.templateId;
+
+      const updateTemplateButtons = (templateId) => {
+        const enabled = Boolean(templateId);
+        if (insertButton) insertButton.toggleAttribute('disabled', !enabled);
+        if (openButton) openButton.toggleAttribute('disabled', !enabled);
+      };
+
+      const renderTemplateError = (error) => {
+        if (!templateErrorEl) return;
+        if (!error) {
+          templateErrorEl.style.display = 'none';
+          templateErrorEl.innerHTML = '';
+          return;
+        }
+        const statusLabel = error.status ? `Status ${error.status}` : 'Status unavailable';
+        const message = error.message || 'Request failed.';
+        templateErrorEl.style.display = 'block';
+        templateErrorEl.innerHTML = `<strong>${escapeHtml(statusLabel)}</strong> — ${escapeHtml(message)}`;
+      };
+
+      const runTemplateCheck = async (templateId) => {
+        if (!templateCheckEl) return null;
+        if (!templateId) {
+          templateCheckEl.textContent = 'Select a template to check required blocks.';
+          renderTemplateError(null);
+          return null;
+        }
+        templateCheckEl.textContent = 'Checking template...';
+        renderTemplateError(null);
+        try {
+          const result = await fetchJsonDetailed(
+            `${API_BASE}/intelligent/template-check?templateId=${encodeURIComponent(templateId)}&kind=${encodeURIComponent(kind)}`
+          );
+          const missing = result.missing || [];
+          if (!missing.length) {
+            templateCheckEl.textContent = '✅ Template includes required blocks';
+          } else {
+            templateCheckEl.textContent = `⚠️ Missing: ${missing.join(', ')}`;
+          }
+          return result;
+        } catch (error) {
+          templateCheckEl.textContent = '⚠️ Template check failed';
+          renderTemplateError(error);
+          toast(error.message || 'Template check failed.', 'warning');
+          return null;
+        }
+      };
+
+      updateTemplateButtons(templateSelect?.value);
+      if (templateSelect?.value) {
+        runTemplateCheck(templateSelect.value);
+      }
+
+      if (templateSelect) {
+        templateSelect.addEventListener('change', () => {
+          updateTemplateButtons(templateSelect.value);
+          runTemplateCheck(templateSelect.value);
+        });
+      }
+
+      if (openButton) {
+        openButton.addEventListener('click', () => {
+          const templateId = String(templateSelect?.value || '').trim();
+          if (!templateId) return;
+          window.location.assign(`/admin/marketing/templates/${templateId}/edit`);
+        });
+      }
+
+      if (insertButton) {
+        insertButton.addEventListener('click', async () => {
+          const templateId = String(templateSelect?.value || '').trim();
+          if (!templateId) return;
+          insertButton.setAttribute('disabled', 'true');
+          renderTemplateError(null);
+          try {
+            const response = await fetchJsonDetailed(`${API_BASE}/intelligent/template-insert`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ templateId, kind }),
+            });
+            if (response.updated) {
+              toast('Inserted required blocks into template.', 'success');
+            } else {
+              toast('Template already includes required blocks.', 'success');
+            }
+            await runTemplateCheck(templateId);
+          } catch (error) {
+            renderTemplateError(error);
+            toast(error.message || 'Template insert failed.', 'warning');
+          } finally {
+            updateTemplateButtons(templateSelect.value);
+          }
+        });
+      }
 
       if (saveButton) {
         saveButton.addEventListener('click', async () => {
