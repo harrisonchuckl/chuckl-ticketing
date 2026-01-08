@@ -3,7 +3,6 @@ import {
   MarketingCampaignStatus,
   MarketingCampaignType,
   MarketingConsentStatus,
-  MarketingIntelligentCampaignKind,
   MarketingRecipientStatus,
   Prisma,
 } from '@prisma/client';
@@ -18,6 +17,7 @@ import { countIntelligentSendsLast30d, hasEmailedShowRecently } from './eligibil
 import { getTenantUpcomingShows, rankShowsForContact } from './recommendations.js';
 import { hasPurchasedShow } from './suppression.js';
 import { shouldSuppressContact } from '../campaigns.js';
+import { IntelligentStrategyKey, isIntelligentStrategyKey } from './types.js';
 
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
@@ -80,7 +80,7 @@ export function isWithinIntelligentSendWindow(configJson: Prisma.JsonValue | nul
 
 export async function runIntelligentCampaign(options: {
   tenantId: string;
-  kind: MarketingIntelligentCampaignKind;
+  kind: string;
   dryRun?: boolean;
   actorUserId?: string | null;
   actorEmail?: string | null;
@@ -90,6 +90,19 @@ export async function runIntelligentCampaign(options: {
   const dryRun = options.dryRun ?? true;
   const runAt = options.runAt ?? new Date();
   const { tenantId, kind } = options;
+
+  const type = await prisma.marketingIntelligentCampaignType.findFirst({
+    where: { tenantId, key: kind },
+    select: { strategyKey: true },
+  });
+  if (!type) {
+    return { ok: false, runId, status: 404, message: 'Intelligent campaign type not found.' };
+  }
+  const strategyKey: IntelligentStrategyKey = isIntelligentStrategyKey(type.strategyKey)
+    ? type.strategyKey
+    : isIntelligentStrategyKey(kind)
+      ? kind
+      : 'MONTHLY_DIGEST';
 
   const config = await prisma.marketingIntelligentCampaign.findFirst({
     where: { tenantId, kind },
@@ -111,7 +124,7 @@ export async function runIntelligentCampaign(options: {
   const runMonthLabel = runDateLabel.slice(0, 7);
   const campaignName = `IC: ${kind} ${runDateLabel}`;
 
-  if (!dryRun && kind === MarketingIntelligentCampaignKind.MONTHLY_DIGEST) {
+  if (!dryRun && strategyKey === 'MONTHLY_DIGEST') {
     const existing = await prisma.marketingCampaign.findFirst({
       where: {
         tenantId,

@@ -479,39 +479,17 @@ async function renderIntelligentCampaigns() {
   }
 
   try {
-    const intelligentKinds = [
-      {
-        kind: 'MONTHLY_DIGEST',
-        label: 'Monthly digest',
-        description: 'Curated monthly picks based on past engagement.',
-      },
-      {
-        kind: 'NEW_ON_SALE_BATCH',
-        label: 'New on sale',
-        description: 'Freshly announced shows for your audience.',
-      },
-      {
-        kind: 'ALMOST_SOLD_OUT',
-        label: 'Almost sold out',
-        description: 'High-demand shows nearing capacity.',
-      },
-      {
-        kind: 'ADDON_UPSELL',
-        label: 'Addon upsell',
-        description: 'Suggested add-ons for recent purchasers.',
-      },
-    ];
     const [data, report, templatesData] = await Promise.all([
       fetchJsonDetailed(`${API_BASE}/intelligent`),
       fetchJsonDetailed(`${API_BASE}/intelligent/report?days=30`),
       fetchJsonDetailed(`${API_BASE}/templates`),
     ]);
-    const configs = data.items || [];
-    const configMap = new Map(configs.map((config) => [config.kind, config]));
+    const intelligentTypes = data.items || [];
+    const configMap = new Map(intelligentTypes.map((config) => [config.kind, config]));
     const reportItems = report?.items || [];
     const statsMap = new Map(reportItems.map((item) => [item.kind, item]));
     const templates = templatesData.items || [];
-    const statsRows = intelligentKinds
+    const statsRows = intelligentTypes
       .map((item) => {
         const stats = statsMap.get(item.kind) || {};
         return `
@@ -529,6 +507,12 @@ async function renderIntelligentCampaigns() {
     const templateOptions = templates.length
       ? templates.map((template) => `<option value="${template.id}">${escapeHtml(template.name)}</option>`).join('')
       : '<option value="">No templates available</option>';
+    const baseStrategies = [
+      { key: 'MONTHLY_DIGEST', label: 'Monthly digest' },
+      { key: 'NEW_ON_SALE_BATCH', label: 'New on sale' },
+      { key: 'ALMOST_SOLD_OUT', label: 'Almost sold out' },
+      { key: 'ADDON_UPSELL', label: 'Addon upsell' },
+    ];
 
     function normalizeConfig(configJson) {
       const fallback = { horizonDays: 90, maxPer30d: 3 };
@@ -549,13 +533,14 @@ async function renderIntelligentCampaigns() {
                 <h2>Intelligent Campaigns</h2>
                 <div class="ms-muted">Configure and preview automated campaign content for a specific contact.</div>
               </div>
+              <button class="ms-primary" id="ms-intelligent-type-add">Add campaign type</button>
             </div>
           </div>
           <div class="ms-card">
             <h3>Campaign configuration</h3>
             <div class="ms-muted">Choose templates and guardrails for each intelligent campaign.</div>
             <div class="ms-grid cols-2" style="margin-top:12px;">
-              ${intelligentKinds
+              ${intelligentTypes
                 .map((item) => {
                   const config = configMap.get(item.kind) || {};
                   const configValues = normalizeConfig(config.configJson);
@@ -636,7 +621,7 @@ async function renderIntelligentCampaigns() {
           </div>
           <div class="ms-card">
             <h3>Campaign kinds</h3>
-            ${intelligentKinds
+            ${intelligentTypes
               .map((item) => {
                 const config = configMap.get(item.kind);
                 const statusLabel = config?.templateId ? 'Configured' : 'Not configured';
@@ -677,6 +662,66 @@ async function renderIntelligentCampaigns() {
         </div>
       </div>
     `;
+
+    const addTypeButton = document.getElementById('ms-intelligent-type-add');
+    if (addTypeButton) {
+      addTypeButton.addEventListener('click', () => {
+        const modal = renderModal(
+          'Add campaign type',
+          `
+            ${renderFormRow('Label', '<input id="ms-intelligent-type-label" type="text" placeholder="VIP reminders" />')}
+            ${renderFormRow(
+              'Description',
+              '<textarea id="ms-intelligent-type-description" rows="3" placeholder="Describe when to use this campaign type."></textarea>'
+            )}
+            ${renderFormRow(
+              'Base strategy',
+              `<select id="ms-intelligent-type-strategy">
+                ${baseStrategies
+                  .map((strategy) => `<option value="${strategy.key}">${escapeHtml(strategy.label)}</option>`)
+                  .join('')}
+              </select>`,
+              'Choose which built-in strategy powers this custom type.'
+            )}
+            <div class="ms-toolbar" style="justify-content:flex-end;margin-top:12px;">
+              <button class="ms-primary" id="ms-intelligent-type-create">Create</button>
+            </div>
+            <div class="ms-muted" id="ms-intelligent-type-status" style="margin-top:8px;"></div>
+          `
+        );
+
+        const createButton = modal.querySelector('#ms-intelligent-type-create');
+        const statusEl = modal.querySelector('#ms-intelligent-type-status');
+        if (createButton) {
+          createButton.addEventListener('click', async () => {
+            const label = String(modal.querySelector('#ms-intelligent-type-label')?.value || '').trim();
+            const description = String(modal.querySelector('#ms-intelligent-type-description')?.value || '').trim();
+            const strategyKey = String(modal.querySelector('#ms-intelligent-type-strategy')?.value || '').trim();
+            if (!label) {
+              if (statusEl) statusEl.textContent = 'Label is required.';
+              return;
+            }
+            if (statusEl) statusEl.textContent = '';
+            createButton.setAttribute('disabled', 'true');
+            try {
+              await fetchJson(`${API_BASE}/intelligent/types`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label, description, strategyKey }),
+              });
+              closeModal();
+              toast('Campaign type created.', 'success');
+              renderIntelligentCampaigns();
+            } catch (error) {
+              if (statusEl) statusEl.textContent = error.message || 'Unable to create campaign type.';
+              toast(error.message || 'Unable to create campaign type.', 'warning');
+            } finally {
+              createButton.removeAttribute('disabled');
+            }
+          });
+        }
+      });
+    }
 
     const searchInput = document.getElementById('ms-intelligent-contact-search');
     const contactSelect = document.getElementById('ms-intelligent-contact-select');
@@ -765,7 +810,7 @@ async function renderIntelligentCampaigns() {
               body: JSON.stringify(payload),
             });
             const updated = response.config || {};
-            configMap.set(kind, updated);
+            configMap.set(kind, { ...existingConfig, ...updated });
             const statusLabel = document.querySelector(`[data-intelligent-status-label="${kind}"]`);
             if (statusLabel) statusLabel.textContent = updated.templateId ? 'Configured' : 'Not configured';
             if (statusEl) statusEl.textContent = 'Saved.';
@@ -783,7 +828,7 @@ async function renderIntelligentCampaigns() {
     main.querySelectorAll('[data-intelligent-preview]').forEach((button) => {
       button.addEventListener('click', async () => {
         const kind = button.getAttribute('data-intelligent-preview');
-        const kindLabel = intelligentKinds.find((item) => item.kind === kind)?.label || kind;
+        const kindLabel = intelligentTypes.find((item) => item.kind === kind)?.label || kind;
         previewKind.textContent = kindLabel;
 
         if (!selectedContactId) {
