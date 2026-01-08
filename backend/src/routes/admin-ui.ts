@@ -15061,7 +15061,7 @@ function renderInterests(customer){
       +       '<div class="form-section full-width">'
       +         '<div class="section-number">02</div>'
       +         '<h3 class="section-title">Listing Details</h3>'
-      +         '<p class="section-desc">Help buyers understand what they\\'re getting.</p>'
+      +         '<p class="section-desc">Help buyers understand what they are getting.</p>'
       +         '<div class="form-field">'
       +           '<label for="title" class="form-label">Title</label>'
       +           '<input type="text" id="title" class="form-input" placeholder="Enter product title">'
