@@ -15546,7 +15546,7 @@ function renderInterests(customer){
       +             '<span class="ps-form-label">Fulfilment</span>'
       +             '<select id="ps_prod_fulfilment" class="ps-select">'
       +               '<option value="SHIPPING">Shipping</option>'
-      +               '<option value="COLLECT">Collect</option>'
+      +               '<option value="COLLECT">Collect at show</option>'
       +               '<option value="EMAIL">Email</option>'
       +             '</select>'
       +           '</label>'
@@ -15972,7 +15972,7 @@ function renderInterests(customer){
         if (data && data.ok){
           $('#ps_prod_msg').textContent = 'Saved';
           if (!productId && data.product && data.product.id){
-            go('/admin/ui/product-store/products/' + data.product.id + '/edit');
+            go('/admin/ui/product-store');
           }
         }
       }catch(err){
