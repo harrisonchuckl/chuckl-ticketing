@@ -1,10 +1,25 @@
 import { Router } from "express";
-import { Prisma, ProductOrderFulfilmentStatus, ProductOrderItemStatus, ProductOrderStatus, ProductOrderSource, ProductStatus } from "@prisma/client";
+import {
+  InventoryMode,
+  Prisma,
+  ProductCategory,
+  ProductFulfilmentType,
+  ProductOrderFulfilmentStatus,
+  ProductOrderItemStatus,
+  ProductOrderStatus,
+  ProductOrderSource,
+  ProductStatus,
+} from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
 import { ensureUniqueSlug, slugify } from "../lib/storefront.js";
 
 const router = Router();
+
+const productStatusValues = new Set(Object.values(ProductStatus));
+const productCategoryValues = new Set(Object.values(ProductCategory));
+const productFulfilmentValues = new Set(Object.values(ProductFulfilmentType));
+const inventoryModeValues = new Set(Object.values(InventoryMode));
 
 function requireUserId(req: any) {
   const id = req?.user?.id;
@@ -36,6 +51,11 @@ function parseIntOrNull(value: any) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.round(parsed) : null;
+}
+
+function normalizeEnumValue<T extends string>(value: any, allowed: Set<string>, fallback: T): T {
+  const normalized = String(value || "").trim().toUpperCase();
+  return (allowed.has(normalized) ? normalized : fallback) as T;
 }
 
 router.get("/product-store/storefront", requireAdminOrOrganiser, async (req, res) => {
@@ -303,13 +323,13 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
         title,
         slug: slugValue,
         description: payload.description || null,
-        category: payload.category || "MERCH",
-        fulfilmentType: payload.fulfilmentType || "NONE",
-        status: payload.status || "DRAFT",
+        category: normalizeEnumValue(payload.category, productCategoryValues, "MERCH"),
+        fulfilmentType: normalizeEnumValue(payload.fulfilmentType, productFulfilmentValues, "NONE"),
+        status: normalizeEnumValue(payload.status, productStatusValues, "DRAFT"),
         pricePence: parseIntOrNull(payload.pricePence),
         currency: payload.currency || "gbp",
         allowCustomAmount: Boolean(payload.allowCustomAmount),
-        inventoryMode: payload.inventoryMode || "UNLIMITED",
+        inventoryMode: normalizeEnumValue(payload.inventoryMode, inventoryModeValues, "UNLIMITED"),
         stockCount: parseIntOrNull(payload.stockCount),
         lowStockThreshold: parseIntOrNull(payload.lowStockThreshold),
         preorderEnabled: Boolean(payload.preorderEnabled),
@@ -380,13 +400,13 @@ router.put("/product-store/products/:id", requireAdminOrOrganiser, async (req, r
         title,
         slug: slugValue,
         description: payload.description || null,
-        category: payload.category || "MERCH",
-        fulfilmentType: payload.fulfilmentType || "NONE",
-        status: payload.status || "DRAFT",
+        category: normalizeEnumValue(payload.category, productCategoryValues, "MERCH"),
+        fulfilmentType: normalizeEnumValue(payload.fulfilmentType, productFulfilmentValues, "NONE"),
+        status: normalizeEnumValue(payload.status, productStatusValues, "DRAFT"),
         pricePence: parseIntOrNull(payload.pricePence),
         currency: payload.currency || "gbp",
         allowCustomAmount: Boolean(payload.allowCustomAmount),
-        inventoryMode: payload.inventoryMode || "UNLIMITED",
+        inventoryMode: normalizeEnumValue(payload.inventoryMode, inventoryModeValues, "UNLIMITED"),
         stockCount: parseIntOrNull(payload.stockCount),
         lowStockThreshold: parseIntOrNull(payload.lowStockThreshold),
         preorderEnabled: Boolean(payload.preorderEnabled),
