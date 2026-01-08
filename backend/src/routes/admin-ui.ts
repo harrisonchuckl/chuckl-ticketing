@@ -2982,14 +2982,32 @@ router.get(
       margin-top:16px;
     }
     .ps-image-row{
+      position:relative;
       border-radius:12px;
-      overflow:hidden;
       border:1px solid #e2e8f0;
       background:#f8fafc;
+      padding:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:grab;
+      transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    .ps-image-row.is-dragover{
+      border-color:#009fe3;
+      box-shadow:0 8px 18px rgba(0,159,227,.18);
+      transform:translateY(-2px);
+    }
+    .ps-image-row.is-dragging{
+      opacity:.6;
+    }
+    .ps-image-row.is-main{
+      border-color:#009fe3;
+      box-shadow:0 0 0 2px rgba(0,159,227,.15);
     }
     .ps-image-thumb{
-      width:80px;
-      height:80px;
+      width:160px;
+      height:160px;
       border-radius:10px;
       overflow:hidden;
       background:#e2e8f0;
@@ -3002,6 +3020,54 @@ router.get(
       height:100%;
       object-fit:cover;
       display:block;
+    }
+    .ps-image-controls{
+      position:absolute;
+      top:6px;
+      right:6px;
+      display:flex;
+      gap:6px;
+    }
+    .ps-image-handle,
+    .ps-image-delete{
+      width:28px;
+      height:28px;
+      border-radius:8px;
+      border:1px solid #cbd5f5;
+      background:#ffffff;
+      color:#1e293b;
+      font-size:16px;
+      font-weight:600;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      box-shadow:0 4px 12px rgba(15,23,42,.12);
+    }
+    .ps-image-handle{
+      cursor:grab;
+    }
+    .ps-image-delete{
+      color:#b91c1c;
+      border-color:#fecaca;
+    }
+    .ps-image-badge{
+      position:absolute;
+      left:8px;
+      bottom:8px;
+      padding:4px 8px;
+      border-radius:8px;
+      border:1px solid #009fe3;
+      background:#ffffff;
+      color:#0369a1;
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      display:none;
+    }
+    .ps-image-row.is-main .ps-image-badge{
+      display:inline-flex;
     }
     .ps-upload-note{
       margin-top:10px;
@@ -3036,7 +3102,7 @@ router.get(
       display:flex;
       align-items:center;
       gap:12px;
-      margin-top:16px;
+      margin:12px 0;
       padding:12px;
       background:rgba(0,159,227,.05);
       border-radius:8px;
@@ -15579,34 +15645,123 @@ function renderInterests(customer){
       return Math.round(parsed * 100);
     }
 
+    function formatPoundsInput(value){
+      var cleaned = String(value || '').replace(/[^0-9.]/g, '');
+      if (!cleaned) return '';
+      var parsed = Number(cleaned);
+      if (!Number.isFinite(parsed)) return '';
+      return '£' + parsed.toFixed(2);
+    }
+
+    function penceFromPoundsInput(value){
+      var cleaned = String(value || '').replace(/[^0-9.]/g, '');
+      return penceFromPounds(cleaned);
+    }
+
+    function formatPoundsInputFromPence(value){
+      var pounds = poundsFromPence(value);
+      return pounds ? ('£' + pounds) : '';
+    }
+
     function addVariantRow(data){
       var row = document.createElement('div');
       row.className = 'ps-inline-row';
       row.innerHTML = ''
         + '<input class="ps-input" placeholder="Title" data-field="title" />'
         + '<input class="ps-input" placeholder="SKU" data-field="sku" />'
-        + '<input class="ps-input" placeholder="Price override" type="number" data-field="price" />'
+        + '<input class="ps-input" placeholder="£0.00" inputmode="decimal" data-field="price" />'
         + '<input class="ps-input" placeholder="Stock override" type="number" data-field="stock" />'
         + '<button class="ps-inline-btn" data-remove>Remove</button>';
       $('#ps_variant_rows').appendChild(row);
       if (data){
         row.querySelector('[data-field="title"]').value = data.title || '';
         row.querySelector('[data-field="sku"]').value = data.sku || '';
-        row.querySelector('[data-field="price"]').value = firstDefined(data.pricePenceOverride, '');
+        row.querySelector('[data-field="price"]').value = formatPoundsInputFromPence(firstDefined(data.pricePenceOverride, ''));
         row.querySelector('[data-field="stock"]').value = firstDefined(data.stockCountOverride, '');
       }
+      var priceInput = row.querySelector('[data-field="price"]');
+      priceInput.addEventListener('blur', function(){
+        priceInput.value = formatPoundsInput(priceInput.value);
+      });
       row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
+    }
+
+    var draggedImageRow = null;
+
+    function updateImageBadges(){
+      var rows = Array.prototype.slice.call($('#ps_image_rows').children);
+      rows.forEach(function(row, index){
+        if (index === 0){
+          row.classList.add('is-main');
+        } else {
+          row.classList.remove('is-main');
+        }
+      });
+    }
+
+    function onImageDragStart(event){
+      draggedImageRow = event.currentTarget;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', '');
+      draggedImageRow.classList.add('is-dragging');
+    }
+
+    function onImageDragOver(event){
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      event.currentTarget.classList.add('is-dragover');
+    }
+
+    function onImageDragLeave(event){
+      event.currentTarget.classList.remove('is-dragover');
+    }
+
+    function onImageDrop(event){
+      event.preventDefault();
+      var target = event.currentTarget;
+      if (!draggedImageRow || draggedImageRow === target) return;
+      var list = $('#ps_image_rows');
+      var rect = target.getBoundingClientRect();
+      var insertBefore = (event.clientX - rect.left) < rect.width / 2;
+      list.insertBefore(draggedImageRow, insertBefore ? target : target.nextSibling);
+      updateImageBadges();
+    }
+
+    function onImageDragEnd(){
+      if (draggedImageRow){
+        draggedImageRow.classList.remove('is-dragging');
+      }
+      $$('#ps_image_rows .ps-image-row').forEach(function(row){
+        row.classList.remove('is-dragover');
+      });
+      draggedImageRow = null;
     }
 
     function addImageRow(data){
       var row = document.createElement('div');
       row.className = 'ps-image-row';
       row.setAttribute('data-url', data.url || '');
+      row.setAttribute('draggable', 'true');
       row.innerHTML = ''
         + '<div class="ps-image-thumb">'
         +   '<img src="' + escapeHtml(data.url || '') + '" alt="Product image" />'
-        + '</div>';
+        + '</div>'
+        + '<div class="ps-image-controls">'
+        +   '<button class="ps-image-handle" type="button" title="Drag to reorder" aria-label="Drag to reorder">↕↔</button>'
+        +   '<button class="ps-image-delete" type="button" title="Delete image" aria-label="Delete image">×</button>'
+        + '</div>'
+        + '<div class="ps-image-badge">Main image</div>';
       $('#ps_image_rows').appendChild(row);
+      row.addEventListener('dragstart', onImageDragStart);
+      row.addEventListener('dragover', onImageDragOver);
+      row.addEventListener('dragleave', onImageDragLeave);
+      row.addEventListener('drop', onImageDrop);
+      row.addEventListener('dragend', onImageDragEnd);
+      row.querySelector('.ps-image-delete').addEventListener('click', function(){
+        row.remove();
+        updateImageBadges();
+      });
+      updateImageBadges();
     }
 
     $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
@@ -15713,7 +15868,7 @@ function renderInterests(customer){
         return {
           title: row.querySelector('[data-field="title"]').value.trim(),
           sku: row.querySelector('[data-field="sku"]').value.trim() || null,
-          pricePenceOverride: row.querySelector('[data-field="price"]').value,
+          pricePenceOverride: penceFromPoundsInput(row.querySelector('[data-field="price"]').value),
           stockCountOverride: row.querySelector('[data-field="stock"]').value,
           sortOrder: index,
         };
@@ -15750,6 +15905,7 @@ function renderInterests(customer){
         $('#ps_prod_max_ticket').value = firstDefined(p.maxPerTicket, '');
         (p.variants || []).forEach(addVariantRow);
         (p.images || []).forEach(addImageRow);
+        updateImageBadges();
       }catch(err){
         console.error('load product failed', err);
       }
