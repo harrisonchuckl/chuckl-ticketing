@@ -3047,6 +3047,11 @@ router.get(
     .ps-image-handle{
       cursor:grab;
     }
+    .ps-image-handle svg{
+      width:16px;
+      height:16px;
+      display:block;
+    }
     .ps-image-delete{
       color:#b91c1c;
       border-color:#fecaca;
@@ -7875,8 +7880,18 @@ document.addEventListener('click', function(e){
       credentials:'include'
     });
     const txt = await res.text();
-    if (!res.ok) throw new Error(txt || ('HTTP ' + res.status));
-    const data = txt ? JSON.parse(txt) : {};
+    var data = {};
+    if (txt){
+      try{
+        data = JSON.parse(txt);
+      }catch(err){
+        data = {};
+      }
+    }
+    if (!res.ok){
+      var errMessage = data && data.error ? data.error : (txt || ('HTTP ' + res.status));
+      throw new Error(errMessage);
+    }
     if (!data.ok || !data.url) throw new Error('Unexpected upload response');
     return data;
   }
@@ -15487,11 +15502,7 @@ function renderInterests(customer){
       +     '<div class="ps-header-section">'
       +       '<h1 class="ps-header-title">Product Store</h1>'
       +       '<h2 class="ps-header-subtitle">' + (isEdit ? 'Edit Product' : 'Create Product') + '</h2>'
-      +       '<p class="ps-header-desc">Keep it simple: add photos, a clear title, and pricing. You can refine details anytime.</p>'
-      +       '<div class="ps-nav-actions">'
-      +         '<button class="ps-nav-btn" id="ps_prod_back">← Back</button>'
-      +         (isEdit ? '' : '<button class="ps-nav-btn" id="ps_prod_import">Import from Printful</button>')
-      +       '</div>'
+      +       '<p class="ps-header-desc">Create products to sell as add on to tickets, as stand alone products or a ticket upgrades such as VIP experiences, meals or anything else you\'d like to add on.</p>'
       +     '</div>'
       +     '<div class="ps-form-grid">'
       +       '<div class="ps-section-card full">'
@@ -15505,6 +15516,7 @@ function renderInterests(customer){
       +         '</div>'
       +         '<input id="ps_image_input" type="file" accept="image/*" multiple style="display:none" />'
       +         '<div id="ps_image_rows" class="ps-image-list"></div>'
+      +         '<div id="ps_image_reorder_hint" class="ps-upload-note"></div>'
       +         '<div id="ps_image_msg" class="ps-upload-note"></div>'
       +       '</div>'
       +       '<div class="ps-section-card full">'
@@ -15533,11 +15545,9 @@ function renderInterests(customer){
       +           '<label>'
       +             '<span class="ps-form-label">Fulfilment</span>'
       +             '<select id="ps_prod_fulfilment" class="ps-select">'
-      +               '<option value="NONE">None</option>'
       +               '<option value="SHIPPING">Shipping</option>'
       +               '<option value="COLLECT">Collect</option>'
       +               '<option value="EMAIL">Email</option>'
-      +               '<option value="PRINTFUL">Printful</option>'
       +             '</select>'
       +           '</label>'
       +         '</div>'
@@ -15611,7 +15621,6 @@ function renderInterests(customer){
       +       '<div class="ps-section-card full ps-tip-card">'
       +         '<div class="ps-tip-title">Tip: Keep it punchy</div>'
       +         '<div class="ps-tip-text">Short titles and clear pricing help buyers check out faster. Focus on what makes your product unique in just a few words.</div>'
-      +         '<a href="#" class="ps-tip-link">Learn more →</a>'
       +       '</div>'
       +     '</div>'
       +     '<div class="ps-action-bar">'
@@ -15688,6 +15697,13 @@ function renderInterests(customer){
 
     var draggedImageRow = null;
 
+    function updateImageReorderHint(){
+      var hint = $('#ps_image_reorder_hint');
+      if (!hint) return;
+      var count = $('#ps_image_rows').children.length;
+      hint.textContent = count > 1 ? 'Drag and drop images to reorder them and select your main image.' : '';
+    }
+
     function updateImageBadges(){
       var rows = Array.prototype.slice.call($('#ps_image_rows').children);
       rows.forEach(function(row, index){
@@ -15697,6 +15713,7 @@ function renderInterests(customer){
           row.classList.remove('is-main');
         }
       });
+      updateImageReorderHint();
     }
 
     function onImageDragStart(event){
@@ -15747,7 +15764,11 @@ function renderInterests(customer){
         +   '<img src="' + escapeHtml(data.url || '') + '" alt="Product image" />'
         + '</div>'
         + '<div class="ps-image-controls">'
-        +   '<button class="ps-image-handle" type="button" title="Drag to reorder" aria-label="Drag to reorder">↕↔</button>'
+        +   '<button class="ps-image-handle" type="button" title="Drag to reorder" aria-label="Drag to reorder">'
+        +     '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+        +       '<path d="M12 2l3 3h-2v4h-2V5H9l3-3zm0 20l-3-3h2v-4h2v4h2l-3 3zm10-10l-3 3v-2h-4v-2h4V9l3 3zM2 12l3-3v2h4v2H5v2l-3-3z" fill="currentColor"/>'
+        +     '</svg>'
+        +   '</button>'
         +   '<button class="ps-image-delete" type="button" title="Delete image" aria-label="Delete image">×</button>'
         + '</div>'
         + '<div class="ps-image-badge">Main image</div>';
@@ -15765,7 +15786,6 @@ function renderInterests(customer){
     }
 
     $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
-    $('#ps_prod_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
     var cancelBtn = $('#ps_prod_cancel');
     if (cancelBtn){
       cancelBtn.addEventListener('click', function(){ go('/admin/ui/product-store'); });
@@ -15830,7 +15850,12 @@ function renderInterests(customer){
             addImageRow({ url: upload.url });
           }
         }catch(err){
-          setImageMessage('Image upload failed. Please try again.');
+          var errText = String((err && err.message) ? err.message : (err || ''));
+          if (errText.toLowerCase().includes('file too large')){
+            setImageMessage('File size is too big, please upload images that are less than 10 GB.');
+          } else {
+            setImageMessage('Image upload failed. Please try again.');
+          }
           hadError = true;
         }
       }
@@ -15893,7 +15918,11 @@ function renderInterests(customer){
         $('#ps_prod_title').value = p.title || '';
         $('#ps_prod_desc').value = p.description || '';
         $('#ps_prod_category').value = p.category || 'MERCH';
-        $('#ps_prod_fulfilment').value = p.fulfilmentType || 'NONE';
+        var fulfilmentValue = p.fulfilmentType;
+        if (!fulfilmentValue || fulfilmentValue === 'NONE' || fulfilmentValue === 'PRINTFUL'){
+          fulfilmentValue = 'SHIPPING';
+        }
+        $('#ps_prod_fulfilment').value = fulfilmentValue;
         $('#ps_prod_status').value = p.status || 'ACTIVE';
         $('#ps_prod_price').value = poundsFromPence(firstDefined(p.pricePence, ''));
         $('#ps_prod_inventory').value = p.inventoryMode || 'UNLIMITED';
