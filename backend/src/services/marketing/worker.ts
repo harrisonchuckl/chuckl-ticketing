@@ -23,7 +23,7 @@ import {
 import prisma from '../../lib/prisma.js';
 import { isWithinIntelligentSendWindow, runIntelligentCampaign } from './intelligent/runner.js';
 import { getRemainingTickets } from './intelligent/availability.js';
-import { buildDefaultMergeContext, renderMergeTags, type MergeContext } from '../../lib/email-marketing/merge-tags.js';
+import { buildDefaultMergeContext, renderMergeTags } from '../../lib/email-marketing/merge-tags.js';
 import { renderCompiledTemplate } from './template-compiler.js';
 import { renderMarketingTemplate } from '../../lib/email-marketing/rendering.js';
 import { createPreferencesToken } from '../../lib/email-marketing/preferences.js';
@@ -667,7 +667,7 @@ async function processAddonUpsellIntelligentCampaigns() {
         const unsubscribeUrl = buildUnsubscribeUrl(tenant, email);
         const preferencesUrl = buildPreferencesUrl(tenant, email);
 
-        const baseMergeContext: MergeContext = buildDefaultMergeContext({
+        const baseMergeContext: ReturnType<typeof buildDefaultMergeContext> = buildDefaultMergeContext({
           contact: {
             firstName: contact.firstName || '',
             lastName: contact.lastName || '',
