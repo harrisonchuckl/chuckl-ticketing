@@ -20926,7 +20926,7 @@ function renderInterests(customer){
 
   if (socialAddSelect) {
     socialAddSelect.innerHTML = Object.keys(SOCIAL_ICON_OPTIONS)
-      .map((type) => `<option value="${type}">${escapeHtml(SOCIAL_ICON_OPTIONS[type].label)}</option>`)
+      .map((type) => '<option value="' + type + '">' + escapeHtml(SOCIAL_ICON_OPTIONS[type].label) + '</option>')
       .join('');
   }
 
