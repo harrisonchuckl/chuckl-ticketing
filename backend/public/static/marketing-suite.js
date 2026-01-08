@@ -3383,7 +3383,27 @@ case 'strip': return {
                 showImageUrl: '',
                 linkShowId: '',
             };
-        case 'imagegroup': return { images: [{src:placeholderSmall}, {src:placeholderSmall}] };
+        case 'imagegroup': {
+            const baseImage = () => ({
+                src: placeholderSmall,
+                alt: '',
+                link: '',
+                showId: '',
+                showImageUrl: '',
+                linkShowId: '',
+                text: '',
+            });
+            return {
+                images: [baseImage(), baseImage()],
+                textStyle: {
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: 400,
+                    textAlign: 'left',
+                    color: '#0f172a',
+                },
+            };
+        }
         case 'imagecard': return { src: placeholderLarge, caption: '<p style="margin-top:10px;">Image caption goes here.</p>' };
         case 'button': return {
             label: 'Click Here',
@@ -3530,6 +3550,69 @@ function readImageFile(file, callback) {
     const reader = new FileReader();
     reader.onload = () => callback(reader.result);
     reader.readAsDataURL(file);
+}
+
+function getImageGroupDefaultTextStyle(style = {}) {
+    return {
+        fontFamily: style.fontFamily || 'Inter',
+        fontSize: Number.isFinite(Number.parseInt(style.fontSize, 10)) ? Number.parseInt(style.fontSize, 10) : 14,
+        fontWeight: Number.isFinite(Number.parseInt(style.fontWeight, 10)) ? Number.parseInt(style.fontWeight, 10) : 400,
+        textAlign: style.textAlign || 'left',
+        color: style.color || '#0f172a',
+    };
+}
+
+function createImageGroupImage() {
+    return {
+        src: getPlaceholderImage(300, 200),
+        alt: '',
+        link: '',
+        showId: '',
+        showImageUrl: '',
+        linkShowId: '',
+        text: '',
+    };
+}
+
+function normalizeImageGroupImage(image = {}) {
+    return {
+        src: image.src || getPlaceholderImage(300, 200),
+        alt: image.alt || '',
+        link: image.link || '',
+        showId: image.showId || '',
+        showImageUrl: image.showImageUrl || '',
+        linkShowId: image.linkShowId || '',
+        text: image.text || '',
+    };
+}
+
+function ensureImageGroupContent(block) {
+    if (!block.content) block.content = {};
+    const images = Array.isArray(block.content.images) ? block.content.images : [];
+    block.content.images = images.map((image) => normalizeImageGroupImage(image));
+    if (!block.content.images.length) {
+        block.content.images = [createImageGroupImage(), createImageGroupImage()];
+    }
+    block.content.textStyle = getImageGroupDefaultTextStyle(block.content.textStyle || {});
+}
+
+function buildImageGroupTextStyle(style) {
+    const resolved = getImageGroupDefaultTextStyle(style || {});
+    const fontFamily = FONT_FAMILY_MAP[resolved.fontFamily] || resolved.fontFamily || '"Inter", "Helvetica Neue", Arial, sans-serif';
+    return `font-family:${fontFamily}; font-size:${resolved.fontSize}px; font-weight:${resolved.fontWeight}; text-align:${resolved.textAlign}; color:${resolved.color};`;
+}
+
+function applyImageGroupTextStyleToEditors(container, style) {
+    if (!container) return;
+    const resolved = getImageGroupDefaultTextStyle(style || {});
+    const fontFamily = FONT_FAMILY_MAP[resolved.fontFamily] || resolved.fontFamily || '"Inter", "Helvetica Neue", Arial, sans-serif';
+    container.querySelectorAll('[data-image-text-editor-input]').forEach((editor) => {
+        editor.style.fontFamily = fontFamily;
+        editor.style.fontSize = `${resolved.fontSize}px`;
+        editor.style.fontWeight = resolved.fontWeight;
+        editor.style.textAlign = resolved.textAlign;
+        editor.style.color = resolved.color;
+    });
 }
 
 /**
@@ -3796,10 +3879,25 @@ function getPreviewHtml(block) {
             }
             return imageHtml;
         }
-        case 'imagegroup': 
-            return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                ${c.images.map(img => `<img src="${img.src}" style="width:100%;">`).join('')}
+        case 'imagegroup': {
+            ensureImageGroupContent(block);
+            const columns = Math.min(2, c.images.length || 1);
+            const textStyle = buildImageGroupTextStyle(c.textStyle || {});
+            return `<div style="display:grid; grid-template-columns:repeat(${columns}, minmax(0, 1fr)); gap:12px;">
+                ${c.images
+                    .map((img) => {
+                        const imageHtml = `<img src="${escapeHtml(img.src)}" alt="${escapeHtml(img.alt || '')}" style="width:100%; display:block;">`;
+                        const linkedImage = img.link
+                            ? `<a href="${escapeHtml(img.link)}" target="_blank" rel="noopener noreferrer">${imageHtml}</a>`
+                            : imageHtml;
+                        const textHtml = img.text
+                            ? `<div style="margin-top:8px; ${textStyle}">${img.text}</div>`
+                            : '';
+                        return `<div>${linkedImage}${textHtml}</div>`;
+                    })
+                    .join('')}
             </div>`; 
+        }
         case 'imagecard': 
             return `<div style="border:1px solid #eee;"><img src="${c.src}" style="width:100%; display:block;"><div style="padding:15px;">${c.caption}</div></div>`; 
         case 'button': {
@@ -4006,6 +4104,36 @@ function getRichTextEditorMarkup(block) {
         <div class="ms-rte-color-row">
             ${renderModernColorPicker('Text Color', 'text-color', textColor, 'updateActiveTextColor')}
             ${renderModernColorPicker('Highlight Color', 'text-highlight', highlightColor, 'updateActiveTextHighlight')}
+        </div>
+    `;
+}
+
+function getImageGroupTextEditorMarkup(image, index) {
+    return `
+        <div class="ms-image-group-text-editor ${image.text ? '' : 'is-hidden'}" data-image-text-editor data-image-index="${index}">
+            <div class="ms-rte-toolbar is-compact">
+                <button class="ms-rte-btn" type="button" data-image-text-command="bold" title="Bold"><strong>B</strong></button>
+                <button class="ms-rte-btn" type="button" data-image-text-command="italic" title="Italic"><em>I</em></button>
+                <button class="ms-rte-btn" type="button" data-image-text-command="underline" title="Underline"><span style="text-decoration:underline;">U</span></button>
+                <button class="ms-rte-btn" type="button" data-image-text-command="strikeThrough" title="Strikethrough"><span style="text-decoration:line-through;">S</span></button>
+                <span class="ms-rte-divider"></span>
+                <button class="ms-rte-btn" type="button" data-image-text-command="insertUnorderedList" title="Bulleted list">• List</button>
+                <button class="ms-rte-btn" type="button" data-image-text-command="insertOrderedList" title="Numbered list">1. List</button>
+                <span class="ms-rte-divider"></span>
+                <button class="ms-rte-btn" type="button" data-image-text-command="justifyLeft" title="Align left">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h12M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <button class="ms-rte-btn" type="button" data-image-text-command="justifyCenter" title="Align center">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12M4 12h16M6 18h12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <button class="ms-rte-btn" type="button" data-image-text-command="justifyRight" title="Align right">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M4 12h16M10 18h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                </button>
+                <span class="ms-rte-divider"></span>
+                <button class="ms-rte-btn" type="button" data-image-text-command="createLink" title="Insert link">🔗</button>
+                <button class="ms-rte-btn" type="button" data-image-text-command="removeFormat" title="Clear formatting">✕</button>
+            </div>
+            <div class="ms-rte-editor" contenteditable="true" data-image-text-editor-input>${image.text || ''}</div>
         </div>
     `;
 }
@@ -4608,6 +4736,479 @@ function openBlockEditor(block) {
                 updateButtonContent();
             });
         }
+    }
+    // --- IMAGE EDITOR ---
+    else if (block.type === 'imagegroup') {
+        ensureImageGroupContent(block);
+        const showOptions = appState.shows
+            .map((show) => `<option value="${show.id}">${escapeHtml(show.title)}</option>`)
+            .join('');
+        const textStyle = getImageGroupDefaultTextStyle(block.content.textStyle || {});
+
+        container.innerHTML = `
+            <div class="ms-image-group-style-card">
+                <div class="ms-sidebar-section-title">Image group settings</div>
+                <div class="ms-field">
+                    <label>Number of images</label>
+                    <input type="number" min="1" max="20" value="${block.content.images.length}" data-image-group-count>
+                    <div class="ms-muted">Increase or decrease the number of shows in the grid.</div>
+                </div>
+            </div>
+            <div class="ms-image-group-style-card">
+                <div class="ms-sidebar-section-title">Text style (applies to all images)</div>
+                <div class="ms-field">
+                    <label>Font family</label>
+                    <select data-image-group-text-style="fontFamily">
+                        ${renderFontFamilyOptions(textStyle.fontFamily)}
+                    </select>
+                </div>
+                <div class="ms-field">
+                    <label>Font size (px)</label>
+                    <input type="number" min="10" max="48" value="${textStyle.fontSize}" data-image-group-text-style="fontSize">
+                </div>
+                <div class="ms-field">
+                    <label>Font weight</label>
+                    <select data-image-group-text-style="fontWeight">
+                        <option value="400" ${textStyle.fontWeight === 400 ? 'selected' : ''}>Regular</option>
+                        <option value="500" ${textStyle.fontWeight === 500 ? 'selected' : ''}>Medium</option>
+                        <option value="600" ${textStyle.fontWeight === 600 ? 'selected' : ''}>Semibold</option>
+                        <option value="700" ${textStyle.fontWeight === 700 ? 'selected' : ''}>Bold</option>
+                    </select>
+                </div>
+                <div class="ms-field">
+                    <label>Alignment</label>
+                    <select data-image-group-text-style="textAlign">
+                        <option value="left" ${textStyle.textAlign === 'left' ? 'selected' : ''}>Left</option>
+                        <option value="center" ${textStyle.textAlign === 'center' ? 'selected' : ''}>Center</option>
+                        <option value="right" ${textStyle.textAlign === 'right' ? 'selected' : ''}>Right</option>
+                    </select>
+                </div>
+                <div class="ms-field">
+                    <label>Text color</label>
+                    <div class="ms-image-group-color-row">
+                        <input type="color" value="${textStyle.color}" data-image-group-text-style="color-picker">
+                        <input type="text" value="${textStyle.color}" data-image-group-text-style="color" maxlength="7">
+                    </div>
+                </div>
+            </div>
+            <div class="ms-image-group-list">
+                ${block.content.images
+                    .map((image, index) => {
+                        const selectedShow = appState.shows.find((show) => show.id === image.showId);
+                        const showImageGrid = selectedShow
+                            ? renderShowImageGrid(selectedShow, image.showImageUrl || image.src)
+                            : '<div class="ms-muted">Select a show to browse its images.</div>';
+                        const preview = image.src
+                            ? `<img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt || '')}" />`
+                            : '<span class="ms-image-group-preview-placeholder"></span>';
+                        return `
+                            <details class="ms-image-group-item" data-image-group-item data-image-index="${index}" ${index === 0 ? 'open' : ''}>
+                                <summary>
+                                    <span>Image ${index + 1}</span>
+                                    <span class="ms-image-group-preview" data-image-summary-preview>${preview}</span>
+                                </summary>
+                                <div class="ms-image-group-body">
+                                    <div class="ms-field">
+                                        <label>Upload image</label>
+                                        <div class="ms-image-upload">
+                                            <input type="file" accept="image/*" data-image-upload-input />
+                                            <div class="ms-image-upload-drop" data-image-upload-drop>
+                                                <strong>Drop image here</strong>
+                                                <span>or click to upload</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="ms-field">
+                                        <label>Image URL</label>
+                                        <input value="${escapeHtml(image.src)}" data-image-field="src">
+                                    </div>
+                                    <div class="ms-field">
+                                        <label>Alt text</label>
+                                        <input value="${escapeHtml(image.alt)}" data-image-field="alt">
+                                    </div>
+                                    <div class="ms-field">
+                                        <label>Show images</label>
+                                        <select data-image-show-select>
+                                            <option value="">Select show</option>
+                                            ${showOptions}
+                                        </select>
+                                        <div class="ms-image-grid-wrapper" data-image-show-grid>${showImageGrid}</div>
+                                        <label class="ms-checkbox-row">
+                                            <input type="checkbox" data-image-link-selected-show ${image.showId && image.linkShowId === image.showId ? 'checked' : ''}>
+                                            Link image to selected show
+                                        </label>
+                                    </div>
+                                    <div class="ms-field">
+                                        <label>Link URL</label>
+                                        <input value="${escapeHtml(image.link || '')}" data-image-field="link" placeholder="https://example.com">
+                                    </div>
+                                    <div class="ms-field">
+                                        <label>Link to show</label>
+                                        <select data-image-link-show>
+                                            <option value="">No show link</option>
+                                            ${showOptions}
+                                        </select>
+                                        <div class="ms-muted">Select a show to auto-fill the link URL.</div>
+                                    </div>
+                                    <button class="ms-secondary ms-image-group-text-toggle" type="button" data-image-text-toggle>
+                                        ${image.text ? 'Edit text beneath image' : 'Add text beneath image'}
+                                    </button>
+                                    ${getImageGroupTextEditorMarkup(image, index)}
+                                </div>
+                            </details>
+                        `;
+                    })
+                    .join('')}
+            </div>
+        `;
+
+        const countInput = container.querySelector('[data-image-group-count]');
+        if (countInput) {
+            countInput.addEventListener('change', () => {
+                const nextValue = Math.max(1, Number.parseInt(countInput.value, 10) || 1);
+                const currentCount = block.content.images.length;
+                if (nextValue > currentCount) {
+                    const additions = Array.from({ length: nextValue - currentCount }, () => createImageGroupImage());
+                    block.content.images = block.content.images.concat(additions);
+                } else if (nextValue < currentCount) {
+                    block.content.images = block.content.images.slice(0, nextValue);
+                }
+                recordEditorHistory();
+                renderBuilderCanvas();
+                openBlockEditor(block);
+            });
+        }
+
+        const applyTextStyleUpdates = () => {
+            block.content.textStyle = getImageGroupDefaultTextStyle(block.content.textStyle || {});
+            applyImageGroupTextStyleToEditors(container, block.content.textStyle);
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+        };
+
+        const fontSelect = container.querySelector('[data-image-group-text-style="fontFamily"]');
+        const fontSizeInput = container.querySelector('[data-image-group-text-style="fontSize"]');
+        const fontWeightSelect = container.querySelector('[data-image-group-text-style="fontWeight"]');
+        const alignSelect = container.querySelector('[data-image-group-text-style="textAlign"]');
+        const colorPickerInput = container.querySelector('[data-image-group-text-style="color-picker"]');
+        const colorTextInput = container.querySelector('[data-image-group-text-style="color"]');
+
+        if (fontSelect) {
+            fontSelect.addEventListener('change', (event) => {
+                block.content.textStyle.fontFamily = event.target.value;
+                applyTextStyleUpdates();
+            });
+        }
+
+        if (fontSizeInput) {
+            fontSizeInput.addEventListener('input', (event) => {
+                block.content.textStyle.fontSize = Math.max(10, Number.parseInt(event.target.value, 10) || 14);
+                applyTextStyleUpdates();
+            });
+        }
+
+        if (fontWeightSelect) {
+            fontWeightSelect.addEventListener('change', (event) => {
+                block.content.textStyle.fontWeight = Number.parseInt(event.target.value, 10) || 400;
+                applyTextStyleUpdates();
+            });
+        }
+
+        if (alignSelect) {
+            alignSelect.addEventListener('change', (event) => {
+                block.content.textStyle.textAlign = event.target.value;
+                applyTextStyleUpdates();
+            });
+        }
+
+        const syncColorInputs = (color) => {
+            if (colorPickerInput) colorPickerInput.value = color;
+            if (colorTextInput) colorTextInput.value = color;
+        };
+
+        if (colorPickerInput) {
+            colorPickerInput.addEventListener('input', (event) => {
+                const color = event.target.value;
+                block.content.textStyle.color = color;
+                syncColorInputs(color);
+                applyTextStyleUpdates();
+            });
+        }
+
+        if (colorTextInput) {
+            colorTextInput.addEventListener('change', (event) => {
+                const value = String(event.target.value || '').trim();
+                const isValid = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value);
+                if (!isValid) {
+                    syncColorInputs(block.content.textStyle.color);
+                    return;
+                }
+                block.content.textStyle.color = value;
+                syncColorInputs(value);
+                applyTextStyleUpdates();
+            });
+        }
+
+        applyImageGroupTextStyleToEditors(container, block.content.textStyle);
+
+        const syncImageGroupPreview = () => {
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+        };
+
+        container.querySelectorAll('[data-image-group-item]').forEach((itemEl) => {
+            const index = Number.parseInt(itemEl.dataset.imageIndex, 10);
+            const image = block.content.images[index];
+            if (!image) return;
+
+            const imageSrcInput = itemEl.querySelector('[data-image-field="src"]');
+            const imageAltInput = itemEl.querySelector('[data-image-field="alt"]');
+            const linkInput = itemEl.querySelector('[data-image-field="link"]');
+            const showSelect = itemEl.querySelector('[data-image-show-select]');
+            const showGrid = itemEl.querySelector('[data-image-show-grid]');
+            const linkShowSelect = itemEl.querySelector('[data-image-link-show]');
+            const linkSelectedShowCheckbox = itemEl.querySelector('[data-image-link-selected-show]');
+            const uploadInput = itemEl.querySelector('[data-image-upload-input]');
+            const uploadDrop = itemEl.querySelector('[data-image-upload-drop]');
+            const summaryPreview = itemEl.querySelector('[data-image-summary-preview]');
+            const textToggle = itemEl.querySelector('[data-image-text-toggle]');
+            const textEditor = itemEl.querySelector('[data-image-text-editor-input]');
+
+            if (showSelect) showSelect.value = image.showId || '';
+            if (linkShowSelect) linkShowSelect.value = image.linkShowId || '';
+
+            const updateSummaryPreview = () => {
+                if (!summaryPreview) return;
+                summaryPreview.innerHTML = image.src
+                    ? `<img src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt || '')}" />`
+                    : '<span class="ms-image-group-preview-placeholder"></span>';
+            };
+
+            const refreshShowGrid = (show) => {
+                if (!showGrid) return;
+                showGrid.innerHTML = show
+                    ? renderShowImageGrid(show, image.showImageUrl || image.src)
+                    : '<div class="ms-muted">Select a show to browse its images.</div>';
+                bindShowImageTiles(show);
+            };
+
+            const handleImageSelection = (url, { fromShow = false } = {}) => {
+                image.src = url;
+                if (fromShow) {
+                    image.showImageUrl = url;
+                } else {
+                    image.showId = '';
+                    image.showImageUrl = '';
+                    if (showSelect) showSelect.value = '';
+                }
+                if (!image.alt) {
+                    image.alt = 'Email image';
+                    if (imageAltInput) imageAltInput.value = image.alt;
+                }
+                if (imageSrcInput) imageSrcInput.value = url;
+                updateSummaryPreview();
+                syncImageGroupPreview();
+            };
+
+            const bindShowImageTiles = (show) => {
+                if (!showGrid) return;
+                showGrid.querySelectorAll('[data-image-url]').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const url = button.getAttribute('data-image-url');
+                        if (!url) return;
+                        handleImageSelection(url, { fromShow: true });
+                        image.showId = showSelect ? showSelect.value : '';
+                        if (show && !image.alt) {
+                            image.alt = show.title || 'Show image';
+                            if (imageAltInput) imageAltInput.value = image.alt;
+                        }
+                        if (linkSelectedShowCheckbox?.checked && show) {
+                            const showLink = getShowLink(show);
+                            image.link = showLink;
+                            image.linkShowId = show.id;
+                            if (linkInput) linkInput.value = showLink;
+                            if (linkShowSelect) linkShowSelect.value = show.id;
+                        }
+                        updateSummaryPreview();
+                        syncImageGroupPreview();
+                    });
+                });
+            };
+
+            if (uploadDrop && uploadInput) {
+                uploadDrop.addEventListener('click', () => uploadInput.click());
+                uploadDrop.addEventListener('dragover', (event) => {
+                    event.preventDefault();
+                    uploadDrop.classList.add('is-dragover');
+                });
+                uploadDrop.addEventListener('dragleave', () => {
+                    uploadDrop.classList.remove('is-dragover');
+                });
+                uploadDrop.addEventListener('drop', (event) => {
+                    event.preventDefault();
+                    uploadDrop.classList.remove('is-dragover');
+                    const file = event.dataTransfer.files?.[0];
+                    if (file) {
+                        readImageFile(file, (result) => {
+                            if (typeof result === 'string') handleImageSelection(result);
+                        });
+                    }
+                });
+                uploadInput.addEventListener('change', (event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                        readImageFile(file, (result) => {
+                            if (typeof result === 'string') handleImageSelection(result);
+                        });
+                    }
+                });
+            }
+
+            if (imageSrcInput) {
+                imageSrcInput.addEventListener('input', (event) => {
+                    image.src = event.target.value;
+                    image.showImageUrl = '';
+                    updateSummaryPreview();
+                    syncImageGroupPreview();
+                });
+            }
+
+            if (imageAltInput) {
+                imageAltInput.addEventListener('input', (event) => {
+                    image.alt = event.target.value;
+                    updateSummaryPreview();
+                    syncImageGroupPreview();
+                });
+            }
+
+            if (showSelect) {
+                showSelect.addEventListener('change', () => {
+                    image.showId = showSelect.value || '';
+                    image.showImageUrl = '';
+                    const show = appState.shows.find((item) => item.id === image.showId);
+                    if (linkSelectedShowCheckbox) {
+                        linkSelectedShowCheckbox.checked = Boolean(show && image.linkShowId === show.id);
+                    }
+                    if (!image.showId) {
+                        refreshShowGrid(null);
+                        return;
+                    }
+                    ensureShowImages(image.showId).then((loadedShow) => {
+                        refreshShowGrid(loadedShow || show);
+                    });
+                });
+            }
+
+            if (linkInput) {
+                linkInput.addEventListener('input', (event) => {
+                    image.link = event.target.value;
+                    const currentLinkShow = appState.shows.find((item) => item.id === image.linkShowId);
+                    if (currentLinkShow && getShowLink(currentLinkShow) !== image.link) {
+                        image.linkShowId = '';
+                        if (linkShowSelect) linkShowSelect.value = '';
+                        if (linkSelectedShowCheckbox) linkSelectedShowCheckbox.checked = false;
+                    }
+                    syncImageGroupPreview();
+                });
+            }
+
+            if (linkShowSelect) {
+                linkShowSelect.addEventListener('change', () => {
+                    const show = appState.shows.find((item) => item.id === linkShowSelect.value);
+                    if (show) {
+                        const showLink = getShowLink(show);
+                        image.link = showLink;
+                        image.linkShowId = show.id;
+                        if (linkInput) linkInput.value = showLink;
+                    } else {
+                        image.linkShowId = '';
+                    }
+                    if (linkSelectedShowCheckbox) {
+                        linkSelectedShowCheckbox.checked = Boolean(show && show.id === image.showId);
+                    }
+                    syncImageGroupPreview();
+                });
+            }
+
+            if (linkSelectedShowCheckbox) {
+                linkSelectedShowCheckbox.addEventListener('change', () => {
+                    const show = appState.shows.find((item) => item.id === (showSelect ? showSelect.value : ''));
+                    if (!show) {
+                        linkSelectedShowCheckbox.checked = false;
+                        return;
+                    }
+                    if (linkSelectedShowCheckbox.checked) {
+                        const showLink = getShowLink(show);
+                        image.link = showLink;
+                        image.linkShowId = show.id;
+                        if (linkInput) linkInput.value = showLink;
+                        if (linkShowSelect) linkShowSelect.value = show.id;
+                    } else if (image.linkShowId === show.id) {
+                        image.linkShowId = '';
+                    }
+                    syncImageGroupPreview();
+                });
+            }
+
+            if (textToggle) {
+                textToggle.addEventListener('click', () => {
+                    if (!image.text) {
+                        image.text = '<p>Add your text here.</p>';
+                        if (textEditor) textEditor.innerHTML = image.text;
+                    }
+                    const editorWrapper = itemEl.querySelector('[data-image-text-editor]');
+                    if (editorWrapper) editorWrapper.classList.remove('is-hidden');
+                    textToggle.textContent = 'Edit text beneath image';
+                    applyImageGroupTextStyleToEditors(container, block.content.textStyle);
+                    syncImageGroupPreview();
+                });
+            }
+
+            if (textEditor) {
+                textEditor.addEventListener('input', () => {
+                    image.text = textEditor.innerHTML;
+                    syncImageGroupPreview();
+                });
+            }
+
+            itemEl.querySelectorAll('[data-image-text-command]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const command = button.getAttribute('data-image-text-command');
+                    if (!textEditor) return;
+                    textEditor.focus();
+                    if (command === 'createLink') {
+                        const url = prompt('Enter a URL');
+                        if (url) document.execCommand('createLink', false, url);
+                    } else if (command === 'justifyLeft' || command === 'justifyCenter' || command === 'justifyRight') {
+                        const alignmentMap = {
+                            justifyLeft: 'left',
+                            justifyCenter: 'center',
+                            justifyRight: 'right',
+                        };
+                        const alignment = alignmentMap[command];
+                        applyAlignment(textEditor, alignment);
+                        block.content.textStyle.textAlign = alignment;
+                        applyTextStyleUpdates();
+                    } else if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
+                        const currentAlignment = block.content.textStyle.textAlign || 'left';
+                        document.execCommand(command, false, null);
+                        applyAlignment(textEditor, currentAlignment, { applyToAllOnCollapse: false });
+                    } else {
+                        document.execCommand('styleWithCSS', false, true);
+                        document.execCommand(command, false, null);
+                    }
+                    image.text = textEditor.innerHTML;
+                    syncImageGroupPreview();
+                });
+            });
+
+            if (image.showId) {
+                ensureShowImages(image.showId).then((loadedShow) => {
+                    if (!loadedShow) return;
+                    refreshShowGrid(loadedShow);
+                });
+            }
+        });
     }
     // --- IMAGE EDITOR ---
     else if (block.type === 'image') {
