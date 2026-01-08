@@ -50,6 +50,71 @@ function escapeHtml(input: string) {
     .replace(/'/g, "&#039;");
 }
 
+function normalizeVideoUrl(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const candidate = /^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    return parsed.toString();
+  } catch (error) {
+    return "";
+  }
+}
+
+function getVideoEmbedInfo(rawUrl: string) {
+  const safeUrl = normalizeVideoUrl(rawUrl);
+  if (!safeUrl) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(safeUrl);
+  } catch (error) {
+    return null;
+  }
+  const hostname = parsed.hostname.replace(/^www\./, "");
+  const path = parsed.pathname;
+  if (hostname === "youtu.be") {
+    const id = path.split("/").filter(Boolean)[0];
+    if (id) return { type: "iframe", src: `https://www.youtube-nocookie.com/embed/${id}` };
+  }
+  if (hostname.endsWith("youtube.com")) {
+    const id = parsed.searchParams.get("v") || path.split("/").filter(Boolean).pop();
+    if (id) return { type: "iframe", src: `https://www.youtube-nocookie.com/embed/${id}` };
+  }
+  if (hostname.endsWith("vimeo.com")) {
+    const id = path.split("/").filter(Boolean).pop();
+    if (id) return { type: "iframe", src: `https://player.vimeo.com/video/${id}` };
+  }
+  if (/\.(mp4|webm|ogg)(\?|#|$)/i.test(path)) {
+    return { type: "video", src: safeUrl };
+  }
+  return { type: "iframe", src: safeUrl };
+}
+
+function renderVideoEmbed(rawUrl: string, label = "Video") {
+  const info = getVideoEmbedInfo(rawUrl);
+  if (!info) return "";
+  if (info.type === "video") {
+    return `
+      <div style="position:relative;padding-top:56.25%;background:#0f172a;border-radius:12px;overflow:hidden;">
+        <video controls src="${escapeHtml(info.src)}" aria-label="${escapeHtml(label)}" style="position:absolute;inset:0;width:100%;height:100%;"></video>
+      </div>
+    `;
+  }
+  return `
+    <div style="position:relative;padding-top:56.25%;background:#0f172a;border-radius:12px;overflow:hidden;">
+      <iframe
+        src="${escapeHtml(info.src)}"
+        title="${escapeHtml(label)}"
+        style="position:absolute;inset:0;width:100%;height:100%;border:0;"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+      ></iframe>
+    </div>
+  `;
+}
+
 function withPx(value: any, fallback: number) {
   if (value === null || value === undefined || value === "") return `${fallback}px`;
   const num = Number(value);
@@ -204,6 +269,14 @@ function renderBlock(block: EmailBlock, options: EmailRenderOptions, tokens: Per
   if (block.type === "Footer") {
     const text = escapeHtml(resolveText(content.text || "", tokens)).replace(/\n/g, "<br/>");
     return `<tr><td style="${cellStyle}"><div style="font-size:${fontSize};line-height:1.5;">${text}</div></td></tr>`;
+  }
+
+  if (block.type === "Video" || block.type === "video") {
+    const videoUrl = resolveText(content.url || content.linkUrl || "", tokens);
+    if (!videoUrl) return "";
+    const embed = renderVideoEmbed(videoUrl, content.title || "Video");
+    if (!embed) return "";
+    return `<tr><td style="${cellStyle}">${embed}</td></tr>`;
   }
 
   if (block.type === "ShowHero") {

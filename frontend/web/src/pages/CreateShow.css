@@ -68,6 +68,13 @@
   margin-top: 1.25rem;
 }
 
+.field-row {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1.25rem;
+}
+
 .field span {
   font-size: 0.9rem;
   color: #2f3a40;
@@ -167,5 +174,9 @@
   .info-card {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
   }
 }

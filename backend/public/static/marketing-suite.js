@@ -3579,7 +3579,7 @@ case 'strip': return {
             height: 24,
         };
         case 'social': return { items: buildDefaultSocialItems() };
-        case 'video': return { url: '', thumbnail: placeholderLarge };
+        case 'video': return { url: '', thumbnail: placeholderLarge, showId: '', showVideoKey: '' };
         case 'code': return { html: '' };
         case 'product': return { productId: null, title: 'Product Name', price: '£0.00' };
         case 'event':
@@ -3718,6 +3718,90 @@ function collectShowImages(show) {
         }
     });
     return images;
+}
+
+function normalizeVideoUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const candidate = /^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+        const parsed = new URL(candidate);
+        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+        return parsed.toString();
+    } catch (error) {
+        return '';
+    }
+}
+
+function getVideoEmbedInfo(rawUrl) {
+    const url = normalizeVideoUrl(rawUrl);
+    if (!url) return null;
+    let parsed;
+    try {
+        parsed = new URL(url);
+    } catch (error) {
+        return null;
+    }
+    const hostname = parsed.hostname.replace(/^www\./, '');
+    const path = parsed.pathname;
+    if (hostname === 'youtu.be') {
+        const id = path.split('/').filter(Boolean)[0];
+        if (id) return { type: 'iframe', src: `https://www.youtube-nocookie.com/embed/${id}` };
+    }
+    if (hostname.endsWith('youtube.com')) {
+        const id = parsed.searchParams.get('v') || path.split('/').filter(Boolean).pop();
+        if (id) return { type: 'iframe', src: `https://www.youtube-nocookie.com/embed/${id}` };
+    }
+    if (hostname.endsWith('vimeo.com')) {
+        const id = path.split('/').filter(Boolean).pop();
+        if (id) return { type: 'iframe', src: `https://player.vimeo.com/video/${id}` };
+    }
+    if (/\.(mp4|webm|ogg)(\?|#|$)/i.test(path)) {
+        return { type: 'video', src: url };
+    }
+    return { type: 'iframe', src: url };
+}
+
+function renderVideoEmbedMarkup(rawUrl, title = 'Video preview') {
+    const info = getVideoEmbedInfo(rawUrl);
+    if (!info) {
+        return '<div class="ms-video-placeholder">Add a video link to preview.</div>';
+    }
+    if (info.type === 'video') {
+        return `
+            <div class="ms-video-embed">
+                <video controls src="${escapeHtml(info.src)}" aria-label="${escapeHtml(title)}"></video>
+            </div>
+        `;
+    }
+    return `
+        <div class="ms-video-embed">
+            <iframe
+                src="${escapeHtml(info.src)}"
+                title="${escapeHtml(title)}"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+            ></iframe>
+        </div>
+    `;
+}
+
+function getShowVideoOptions(show) {
+    if (!show) return [];
+    const options = [];
+    const videoOne = normalizeVideoUrl(show.videoUrlOne);
+    const videoTwo = normalizeVideoUrl(show.videoUrlTwo);
+    if (videoOne) options.push({ key: 'videoUrlOne', label: 'Video one', url: videoOne });
+    if (videoTwo) options.push({ key: 'videoUrlTwo', label: 'Video two', url: videoTwo });
+    return options;
+}
+
+function resolveShowVideoUrl(show, key) {
+    const options = getShowVideoOptions(show);
+    if (!options.length) return '';
+    const selected = options.find((option) => option.key === key) || options[0];
+    return selected ? selected.url : '';
 }
 
 function ensureShowImages(showId) {
@@ -4255,7 +4339,7 @@ function getPreviewHtml(block) {
             return `<div class="ms-space-block" style="height:${height}px;"></div>`;
         }
         case 'social': return renderSocialBlock(c);
-        case 'video': return `<div style="position:relative;"><img src="${c.thumbnail}" style="width:100%;"><div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(0,0,0,0.5); color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;">▶</div></div>`;
+        case 'video': return renderVideoEmbedMarkup(c.url);
         case 'code': return `<div style="background:#f1f5f9; padding:10px; font-family:monospace; font-size:12px; text-align:center;">&lt;HTML Code /&gt;</div>`;
         case 'event': return renderEventGrid(block);
         default: return `<div class="ms-muted">[${block.type.toUpperCase()} BLOCK]</div>`;
@@ -5848,6 +5932,110 @@ function openBlockEditor(block) {
                 if (loadedShow && showGrid) {
                     refreshShowGrid(loadedShow, block.content.showImageUrl || block.content.src);
                 }
+            });
+        }
+    }
+    else if (block.type === 'video') {
+        const availableShows = (appState.shows || []).filter((show) => getShowVideoOptions(show).length);
+        const showOptions = availableShows
+            .map((show) => `<option value="${show.id}">${escapeHtml(show.title)}</option>`)
+            .join('');
+        const selectedShowId = block.content.showId || '';
+        const selectedShow = availableShows.find((show) => show.id === selectedShowId);
+        const showVideoOptions = selectedShow ? getShowVideoOptions(selectedShow) : [];
+        const existingVideoKey = block.content.showVideoKey || '';
+        const resolvedVideoKey = showVideoOptions.some((option) => option.key === existingVideoKey)
+            ? existingVideoKey
+            : (showVideoOptions[0]?.key || '');
+        const resolvedShowUrl = selectedShow ? resolveShowVideoUrl(selectedShow, resolvedVideoKey) : '';
+        if (!block.content.url && resolvedShowUrl) {
+            block.content.url = resolvedShowUrl;
+            block.content.showVideoKey = resolvedVideoKey;
+        }
+
+        container.innerHTML = `
+            <div class="ms-card ms-video-settings">
+                <div class="ms-sidebar-section-title">Video settings</div>
+                <div class="ms-field">
+                    <label>Video URL</label>
+                    <input id="ms-video-url" value="${escapeHtml(block.content.url || '')}" placeholder="https://youtube.com/watch?v=..." />
+                    <div class="ms-muted">Paste a YouTube, Vimeo, or direct video URL.</div>
+                </div>
+                <div class="ms-field">
+                    <label>Link to show</label>
+                    <select id="ms-video-show-select">
+                        <option value="">No show</option>
+                        ${showOptions || '<option value="" disabled>No shows with videos yet</option>'}
+                    </select>
+                    <div class="ms-muted">Pick a show to pull its video links.</div>
+                </div>
+                ${showVideoOptions.length ? `
+                    <div class="ms-field">
+                        <label>Show video</label>
+                        <select id="ms-video-source-select">
+                            ${showVideoOptions
+                                .map(
+                                    (option) =>
+                                        `<option value="${option.key}" ${option.key === resolvedVideoKey ? 'selected' : ''}>${escapeHtml(option.label)}</option>`
+                                )
+                                .join('')}
+                        </select>
+                    </div>
+                ` : ''}
+                <div class="ms-field">
+                    <label>Preview</label>
+                    <div class="ms-video-preview" data-video-preview>${renderVideoEmbedMarkup(block.content.url)}</div>
+                </div>
+            </div>
+        `;
+
+        const urlInput = container.querySelector('#ms-video-url');
+        const showSelect = container.querySelector('#ms-video-show-select');
+        const sourceSelect = container.querySelector('#ms-video-source-select');
+        const preview = container.querySelector('[data-video-preview]');
+
+        const syncPreview = () => {
+            if (preview) preview.innerHTML = renderVideoEmbedMarkup(block.content.url);
+            recordEditorHistory({ immediate: false });
+            renderBuilderCanvas();
+        };
+
+        if (showSelect) showSelect.value = selectedShowId;
+
+        if (urlInput) {
+            urlInput.addEventListener('input', (event) => {
+                block.content.url = event.target.value;
+                if (block.content.showId) {
+                    block.content.showId = '';
+                    block.content.showVideoKey = '';
+                    if (showSelect) showSelect.value = '';
+                }
+                syncPreview();
+            });
+        }
+
+        if (showSelect) {
+            showSelect.addEventListener('change', () => {
+                block.content.showId = showSelect.value || '';
+                const show = availableShows.find((item) => item.id === block.content.showId);
+                const options = show ? getShowVideoOptions(show) : [];
+                block.content.showVideoKey = options[0]?.key || '';
+                block.content.url = options[0]?.url || '';
+                if (urlInput) urlInput.value = block.content.url;
+                recordEditorHistory();
+                renderBuilderCanvas();
+                openBlockEditor(block);
+            });
+        }
+
+        if (sourceSelect) {
+            sourceSelect.addEventListener('change', () => {
+                const show = availableShows.find((item) => item.id === (showSelect ? showSelect.value : ''));
+                if (!show) return;
+                block.content.showVideoKey = sourceSelect.value;
+                block.content.url = resolveShowVideoUrl(show, sourceSelect.value);
+                if (urlInput) urlInput.value = block.content.url;
+                syncPreview();
             });
         }
     }
