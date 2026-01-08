@@ -261,6 +261,100 @@ body {
   font-size: 13px;
   color: var(--ms-text);
 }
+
+.ms-image-group-style-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.ms-image-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ms-image-group-item {
+  border: 1px solid var(--ms-border);
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.ms-image-group-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ms-text);
+  list-style: none;
+}
+
+.ms-image-group-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-image-group-preview {
+  width: 48px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ms-image-group-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ms-image-group-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #e2e8f0, #f8fafc);
+}
+
+.ms-image-group-body {
+  padding: 14px;
+  border-top: 1px solid var(--ms-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ms-image-group-text-toggle {
+  align-self: flex-start;
+}
+
+.ms-image-group-text-editor {
+  border: 1px solid var(--ms-border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.ms-image-group-text-editor.is-hidden {
+  display: none;
+}
+
+.ms-image-group-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ms-image-group-color-row input[type="text"] {
+  width: 100%;
+}
 /* 5. THE BUILDER BLOCKS (MASTER SETTINGS) */
 .ms-builder-block {
   position: relative;
