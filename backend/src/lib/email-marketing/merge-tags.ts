@@ -73,5 +73,6 @@ export function buildDefaultMergeContext(options: {
     firstName: contact.firstName || '',
     lastName: contact.lastName || '',
     email: contact.email || '',
+    meta: {},
   };
 }
