@@ -20736,6 +20736,17 @@ function renderInterests(customer){
             +'</div>'
           +'</div>'
         +'</div>'
+        +'<div class="card" style="margin-top:12px">'
+          +'<div class="title">Social media tags</div>'
+          +'<div class="muted">Add social links to auto-fill campaign social blocks.</div>'
+          +'<div id="social_links_list" style="display:grid;gap:10px;margin-top:12px"></div>'
+          +'<div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">'
+            +'<select id="social_links_add_select" class="input" style="min-width:200px"></select>'
+            +'<button class="btn" id="social_links_add_btn">Add icon</button>'
+            +'<button class="btn p" id="social_links_save">Save social links</button>'
+            +'<div id="social_links_msg" class="muted"></div>'
+          +'</div>'
+        +'</div>'
       +'</div>'
     +'</div>';
 
@@ -20790,6 +20801,125 @@ function renderInterests(customer){
   $('#brand_color_rgb').value = (u && u.brandColorRgb) || '';
   $('#brand_color_hex').value = (u && u.brandColorHex) || '';
   $('#brand_logo_url').value = (u && u.brandLogoUrl) || '';
+
+  const SOCIAL_ICON_OPTIONS = {
+    facebook: {
+      label: 'Facebook',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>',
+    },
+    instagram: {
+      label: 'Instagram',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="3"/><circle cx="17" cy="7" r="1"/></svg>',
+    },
+    x: {
+      label: 'X (Twitter)',
+      icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l16 16M20 4L4 20"/></svg>',
+    },
+    tiktok: {
+      label: 'TikTok',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5v10a4 4 0 1 1-3-3.87"/><path d="M11 5c2.5 3 5 4 8 4"/></svg>',
+    },
+    youtube: {
+      label: 'YouTube',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="10" rx="2"/><polygon points="10 9 15 12 10 15 10 9"/></svg>',
+    },
+    linkedin: {
+      label: 'LinkedIn',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="8" y1="11" x2="8" y2="16"/><line x1="8" y1="8" x2="8" y2="8"/><path d="M12 16v-5a2 2 0 0 1 4 0v5"/></svg>',
+    },
+    pinterest: {
+      label: 'Pinterest',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 20l1.5-6"/><path d="M10.5 9.5a2.5 2.5 0 1 1 3.5 2.3"/></svg>',
+    },
+    snapchat: {
+      label: 'Snapchat',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5a4 4 0 0 1 4 4v2c0 1.1.9 2 2 2"/><path d="M6 13a2 2 0 0 0 2-2V9a4 4 0 0 1 8 0v2a2 2 0 0 0 2 2"/><path d="M8 17c1.5 1.3 2.5 2 4 2s2.5-.7 4-2"/></svg>',
+    },
+    website: {
+      label: 'Website',
+      icon:
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/></svg>',
+    },
+  };
+  const socialDefaults = ['facebook', 'instagram', 'x', 'tiktok'];
+  const normalizeSocialType = (value) => {
+    const raw = String(value || '').toLowerCase().trim();
+    if (raw === 'twitter') return 'x';
+    return SOCIAL_ICON_OPTIONS[raw] ? raw : null;
+  };
+  const normalizeSocialLinks = (links) => {
+    const items = Array.isArray(links) ? links : [];
+    const map = new Map();
+    items.forEach((entry) => {
+      const type = normalizeSocialType(entry?.type);
+      if (!type || map.has(type)) return;
+      map.set(type, { type, url: String(entry?.url || '') });
+    });
+    const baseItems = socialDefaults.map((type) => map.get(type) || { type, url: '' });
+    const extraItems = [];
+    map.forEach((value, type) => {
+      if (!socialDefaults.includes(type)) extraItems.push(value);
+    });
+    return baseItems.concat(extraItems);
+  };
+
+  let socialLinksState = normalizeSocialLinks(u && u.socialLinks);
+  const socialLinksList = $('#social_links_list');
+  const socialAddSelect = $('#social_links_add_select');
+  const socialAddBtn = $('#social_links_add_btn');
+  const socialSaveBtn = $('#social_links_save');
+  const socialMsg = $('#social_links_msg');
+
+  if (socialAddSelect) {
+    socialAddSelect.innerHTML = Object.keys(SOCIAL_ICON_OPTIONS)
+      .map((type) => `<option value="${type}">${escapeHtml(SOCIAL_ICON_OPTIONS[type].label)}</option>`)
+      .join('');
+  }
+
+  function renderSocialLinks(){
+    if (!socialLinksList) return;
+    socialLinksList.innerHTML = socialLinksState
+      .map((entry, index) => {
+        const icon = SOCIAL_ICON_OPTIONS[entry.type]?.icon || '';
+        const label = SOCIAL_ICON_OPTIONS[entry.type]?.label || entry.type;
+        return ''
+          + '<div class="row" data-social-index="' + index + '" style="gap:8px;align-items:center;flex-wrap:nowrap;border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff">'
+          +   '<span style="width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:#f1f5f9;color:#0f172a;">' + icon + '</span>'
+          +   '<div style="flex:1;min-width:0">'
+          +     '<div style="font-size:12px;font-weight:700;margin-bottom:4px">' + escapeHtml(label) + '</div>'
+          +     '<input class="input" data-social-url value="' + escapeHtml(entry.url || '') + '" placeholder="https://example.com" />'
+          +   '</div>'
+          +   '<button class="btn" data-social-remove type="button">Remove</button>'
+          + '</div>';
+      })
+      .join('');
+
+    socialLinksList.querySelectorAll('[data-social-index]').forEach(function(row){
+      var index = Number(row.getAttribute('data-social-index'));
+      var urlInput = row.querySelector('[data-social-url]');
+      var removeBtn = row.querySelector('[data-social-remove]');
+      if (urlInput){
+        urlInput.addEventListener('input', function(){
+          socialLinksState[index].url = urlInput.value;
+        });
+      }
+      if (removeBtn){
+        removeBtn.addEventListener('click', function(){
+          socialLinksState.splice(index, 1);
+          renderSocialLinks();
+        });
+      }
+    });
+  }
+
+  renderSocialLinks();
 
   const updatePreview = () => {
     const raw = ($('#biz_storefrontSlug').value || '').trim();
@@ -20917,6 +21047,46 @@ function renderInterests(customer){
       $('#brand_err').textContent = cleanErr(e);
     }
   });
+
+  if (socialAddBtn) {
+    socialAddBtn.addEventListener('click', function(){
+      if (!socialAddSelect) return;
+      const type = socialAddSelect.value;
+      if (!type || !SOCIAL_ICON_OPTIONS[type]) return;
+      if (socialLinksState.some((item) => item.type === type)) {
+        showToast('That icon is already added.', false);
+        return;
+      }
+      socialLinksState.push({ type: type, url: '' });
+      renderSocialLinks();
+    });
+  }
+
+  if (socialSaveBtn) {
+    socialSaveBtn.addEventListener('click', async function(){
+      if (socialMsg) socialMsg.textContent = '';
+      try{
+        const payload = {
+          socialLinks: socialLinksState.map((item) => ({
+            type: item.type,
+            url: String(item.url || '').trim()
+          }))
+        };
+        const r = await j('/auth/me', {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if (r && r.ok){
+          showToast('Social links saved.', true);
+        }else{
+          throw new Error((r && (r.message || r.error)) || 'Failed to update');
+        }
+      }catch(e){
+        if (socialMsg) socialMsg.textContent = cleanErr(e);
+      }
+    });
+  }
 
   $('#pw_save').addEventListener('click', async function(){
     $('#pw_err').textContent = '';
