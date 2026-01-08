@@ -801,3 +801,82 @@ body {
 .ms-field input, .ms-field select, .ms-field textarea { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--ms-border); }
 
 .ms-muted { color: var(--ms-muted); font-size: 13px; }
+
+.ms-social-settings {
+  display: grid;
+  gap: 12px;
+}
+
+.ms-social-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ms-social-row {
+  display: grid;
+  grid-template-columns: auto 1fr 2fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ms-social-row select,
+.ms-social-row input {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--ms-border);
+  font-size: 13px;
+}
+
+.ms-social-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--ms-border);
+  background: #fff;
+  display: grid;
+  place-items: center;
+  color: #0f172a;
+}
+
+.ms-social-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  fill: none;
+}
+
+.ms-social-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ms-social-preview {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ms-social-preview-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--ms-border);
+  background: #fff;
+  color: var(--ms-text);
+  text-decoration: none;
+}
+
+.ms-social-preview-item.is-empty {
+  opacity: 0.6;
+}
+
+.ms-social-preview-empty {
+  color: var(--ms-muted);
+  font-size: 13px;
+}

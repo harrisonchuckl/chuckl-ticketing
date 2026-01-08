@@ -20736,6 +20736,19 @@ function renderInterests(customer){
             +'</div>'
           +'</div>'
         +'</div>'
+        +'<div class="card" style="margin-top:12px;">'
+          +'<div class="title">Social media tags</div>'
+          +'<div class="muted">Share your social links across marketing templates.</div>'
+          +'<div id="social_links_list" style="display:grid;gap:8px;margin-top:10px;"></div>'
+          +'<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">'
+            +'<select class="input" id="social_add_type"></select>'
+            +'<button class="btn" id="social_add_btn">Add icon</button>'
+          +'</div>'
+          +'<div class="row" style="margin-top:10px;gap:8px">'
+            +'<button class="btn p" id="social_save">Save social links</button>'
+            +'<div id="social_err" class="error"></div>'
+          +'</div>'
+        +'</div>'
       +'</div>'
     +'</div>';
 
@@ -20840,6 +20853,138 @@ function renderInterests(customer){
       }finally{
         brandLogoUploadBtn.disabled = false;
         brandLogoUploadBtn.textContent = 'Upload logo';
+      }
+    });
+  }
+
+  const SOCIAL_ICON_OPTIONS = [
+    { type: 'facebook', label: 'Facebook' },
+    { type: 'instagram', label: 'Instagram' },
+    { type: 'tiktok', label: 'TikTok' },
+    { type: 'x', label: 'X (Twitter)' },
+    { type: 'linkedin', label: 'LinkedIn' },
+    { type: 'youtube', label: 'YouTube' },
+    { type: 'pinterest', label: 'Pinterest' },
+    { type: 'website', label: 'Website' }
+  ];
+  const DEFAULT_SOCIAL_TYPES = ['facebook', 'instagram', 'x', 'tiktok'];
+  const socialOptionsMap = SOCIAL_ICON_OPTIONS.reduce(function(map, option){
+    map[option.type] = option.label;
+    return map;
+  }, {});
+
+  function normalizeSocialLinks(list){
+    var cleaned = Array.isArray(list) ? list.map(function(link){
+      return {
+        type: (link && link.type ? String(link.type).trim() : ''),
+        url: (link && link.url ? String(link.url).trim() : '')
+      };
+    }).filter(function(link){ return link.type || link.url; }) : [];
+
+    var byType = cleaned.reduce(function(map, link){
+      if (!link.type) return map;
+      map[link.type] = { type: link.type, url: link.url || '' };
+      return map;
+    }, {});
+
+    var defaults = DEFAULT_SOCIAL_TYPES.map(function(type){
+      return { type: type, url: (byType[type] && byType[type].url) || '' };
+    });
+
+    var extras = cleaned.filter(function(link){
+      return link.type && DEFAULT_SOCIAL_TYPES.indexOf(link.type) === -1;
+    });
+
+    return defaults.concat(extras);
+  }
+
+  var socialLinks = normalizeSocialLinks(u.socialLinks);
+  var socialListEl = $('#social_links_list');
+  var socialAddSelect = $('#social_add_type');
+  var socialErr = $('#social_err');
+
+  function buildSocialOptions(selectedType){
+    var options = SOCIAL_ICON_OPTIONS.map(function(option){
+      var selected = option.type === selectedType ? ' selected' : '';
+      return '<option value="' + option.type + '"' + selected + '>' + option.label + '</option>';
+    });
+    if (selectedType && !socialOptionsMap[selectedType]){
+      options.push('<option value="' + escapeHtml(selectedType) + '" selected>' + escapeHtml(selectedType) + '</option>');
+    }
+    return options.join('');
+  }
+
+  function renderSocialLinks(){
+    if (!socialListEl) return;
+    socialListEl.innerHTML = socialLinks.map(function(link, index){
+      return ''
+        + '<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;" data-social-index="' + index + '">'
+        +   '<select class="input" data-social-type style="min-width:160px;">' + buildSocialOptions(link.type) + '</select>'
+        +   '<input class="input" data-social-url placeholder="https://example.com" style="flex:1;min-width:220px;" value="' + escapeHtml(link.url || '') + '" />'
+        +   '<button class="btn" data-social-remove>Delete</button>'
+        + '</div>';
+    }).join('');
+
+    $$('#social_links_list [data-social-index]').forEach(function(row){
+      var index = Number(row.getAttribute('data-social-index'));
+      var typeSelect = row.querySelector('[data-social-type]');
+      var urlInput = row.querySelector('[data-social-url]');
+      var removeBtn = row.querySelector('[data-social-remove]');
+      if (typeSelect){
+        typeSelect.addEventListener('change', function(){
+          socialLinks[index].type = typeSelect.value;
+        });
+      }
+      if (urlInput){
+        urlInput.addEventListener('input', function(){
+          socialLinks[index].url = urlInput.value;
+        });
+      }
+      if (removeBtn){
+        removeBtn.addEventListener('click', function(){
+          socialLinks.splice(index, 1);
+          renderSocialLinks();
+        });
+      }
+    });
+  }
+
+  if (socialAddSelect){
+    socialAddSelect.innerHTML = buildSocialOptions('facebook');
+  }
+  renderSocialLinks();
+
+  var socialAddBtn = $('#social_add_btn');
+  if (socialAddBtn && socialAddSelect){
+    socialAddBtn.addEventListener('click', function(){
+      var type = socialAddSelect.value;
+      socialLinks.push({ type: type, url: '' });
+      renderSocialLinks();
+    });
+  }
+
+  var socialSaveBtn = $('#social_save');
+  if (socialSaveBtn){
+    socialSaveBtn.addEventListener('click', async function(){
+      if (socialErr) socialErr.textContent = '';
+      try{
+        const payload = {
+          socialLinks: socialLinks.map(function(link){
+            return { type: link.type, url: link.url };
+          })
+        };
+        const r = await j('/auth/me', {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if (r && r.ok){
+          alert('Social links updated');
+        }else{
+          throw new Error((r && (r.message || r.error)) || 'Failed to update social links');
+        }
+      }catch(e){
+        if (socialErr) socialErr.textContent = cleanErr(e);
       }
     });
   }

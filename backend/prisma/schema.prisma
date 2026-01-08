@@ -438,6 +438,7 @@ model User {
   brandLogoUrl  String?
   brandColorRgb String?
   brandColorHex String?
+  socialLinks   Json?
   addressLine1  String?
   addressLine2  String?
   city          String?
