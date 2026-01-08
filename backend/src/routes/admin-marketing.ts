@@ -361,6 +361,71 @@ function formatShowDate(date?: Date | string | null) {
   return value.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+const INTELLIGENT_REQUIRED_TAGS = {
+  shows: '{{recommendedShowsHtml}}',
+  addons: '{{recommendedAddonsHtml}}',
+};
+
+const INTELLIGENT_OPTIONAL_CONTACT_TAGS = ['{{contact.firstName}}', '{{contact.lastName}}', '{{contact.email}}'];
+
+function resolveIntelligentTagRequirements(kind: string, strategyKey?: string | null) {
+  const isAddon = kind === 'ADDON_UPSELL' || strategyKey === 'ADDON_UPSELL';
+  return {
+    required: [isAddon ? INTELLIGENT_REQUIRED_TAGS.addons : INTELLIGENT_REQUIRED_TAGS.shows],
+    optional: INTELLIGENT_OPTIONAL_CONTACT_TAGS,
+  };
+}
+
+function evaluateTemplateTags(template: { mjmlBody?: string | null; compiledHtml?: string | null }, tags: string[]) {
+  const haystacks = [template.mjmlBody || '', template.compiledHtml || ''].filter(Boolean);
+  const found = tags.filter((tag) => haystacks.some((value) => value.includes(tag)));
+  const missing = tags.filter((tag) => !found.includes(tag));
+  return { found, missing };
+}
+
+function buildIntelligentInsertBlock(kind: string, missing: string[]) {
+  if (!missing.length) return '';
+  const blocks = missing
+    .map((tag) => {
+      if (tag === INTELLIGENT_REQUIRED_TAGS.addons) {
+        return `
+<mj-section>
+  <mj-column>
+    <mj-divider border-color="#e2e8f0" border-width="1px" />
+    <mj-text font-size="16px" font-weight="600">Recommended add-ons</mj-text>
+    <mj-raw>${INTELLIGENT_REQUIRED_TAGS.addons}</mj-raw>
+  </mj-column>
+</mj-section>`;
+      }
+      return `
+<mj-section>
+  <mj-column>
+    <mj-divider border-color="#e2e8f0" border-width="1px" />
+    <mj-text font-size="16px" font-weight="600">Recommended shows</mj-text>
+    <mj-raw>${INTELLIGENT_REQUIRED_TAGS.shows}</mj-raw>
+  </mj-column>
+</mj-section>`;
+    })
+    .join('\n');
+
+  return `
+<!-- TIXALL_INTELLIGENT_BLOCKS_START kind=${kind} -->
+${blocks}
+<!-- TIXALL_INTELLIGENT_BLOCKS_END -->`;
+}
+
+function appendIntelligentBlocks(mjmlBody: string, insertBlock: string) {
+  if (!insertBlock.trim()) return mjmlBody;
+  const insertion = `\n${insertBlock}\n`;
+  if (/<\/mj-body>/i.test(mjmlBody)) {
+    return mjmlBody.replace(/<\/mj-body>/i, `${insertion}</mj-body>`);
+  }
+  if (/<\/mjml>/i.test(mjmlBody)) {
+    return mjmlBody.replace(/<\/mjml>/i, `${insertion}</mjml>`);
+  }
+  return `${mjmlBody}${insertion}`;
+}
+
 function formatLocalDateTime(value: Date) {
   const pad = (num: number) => String(num).padStart(2, '0');
   const year = value.getFullYear();
@@ -1206,6 +1271,127 @@ router.get('/api/marketing/intelligent', requireAdminOrOrganiser, async (req, re
 
   const response = { ok: true, items };
   console.info('[marketing:intelligent:get] response', { tenantId, total: items.length });
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.get('/api/marketing/intelligent/template-check', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const templateId = String(req.query?.templateId || '').trim();
+  const kindInput = String(req.query?.kind || '').trim();
+  if (!templateId || !kindInput) {
+    return res.status(400).json({ ok: false, message: 'templateId and kind are required.' });
+  }
+
+  const type = await resolveIntelligentType(tenantId, kindInput);
+  if (!type) {
+    return res.status(400).json({ ok: false, message: 'Invalid intelligent campaign kind.' });
+  }
+
+  const template = await prisma.marketingTemplate.findFirst({
+    where: { tenantId, id: templateId },
+    select: { id: true, mjmlBody: true, compiledHtml: true },
+  });
+  if (!template) {
+    return res.status(404).json({ ok: false, message: 'Template not found.' });
+  }
+
+  const requirements = resolveIntelligentTagRequirements(type.key, type.strategyKey);
+  const { found, missing } = evaluateTemplateTags(template, requirements.required);
+  const response = {
+    ok: missing.length === 0,
+    kind: type.key,
+    templateId,
+    required: requirements.required,
+    missing,
+    found,
+  };
+  console.info('[marketing:intelligent:template-check]', {
+    tenantId,
+    templateId,
+    kind: type.key,
+    missingCount: missing.length,
+  });
+  logMarketingApi(req, response);
+  res.json(response);
+});
+
+router.post('/api/marketing/intelligent/template-insert', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const templateId = String(req.body?.templateId || '').trim();
+  const kindInput = String(req.body?.kind || '').trim();
+  if (!templateId || !kindInput) {
+    return res.status(400).json({ ok: false, message: 'templateId and kind are required.' });
+  }
+
+  const type = await resolveIntelligentType(tenantId, kindInput);
+  if (!type) {
+    return res.status(400).json({ ok: false, message: 'Invalid intelligent campaign kind.' });
+  }
+
+  const template = await prisma.marketingTemplate.findFirst({
+    where: { tenantId, id: templateId },
+    select: { id: true, mjmlBody: true, compiledHtml: true, isLocked: true, name: true },
+  });
+  if (!template) {
+    return res.status(404).json({ ok: false, message: 'Template not found.' });
+  }
+  if (template.isLocked) {
+    return res.status(409).json({ ok: false, message: 'Template is locked and cannot be updated.' });
+  }
+
+  const requirements = resolveIntelligentTagRequirements(type.key, type.strategyKey);
+  const { found, missing } = evaluateTemplateTags(template, requirements.required);
+  if (!missing.length) {
+    const response = {
+      ok: true,
+      kind: type.key,
+      templateId,
+      required: requirements.required,
+      missing,
+      found,
+      updated: false,
+    };
+    console.info('[marketing:intelligent:template-insert]', {
+      tenantId,
+      templateId,
+      kind: type.key,
+      updated: false,
+    });
+    logMarketingApi(req, response);
+    return res.json(response);
+  }
+
+  const insertBlock = buildIntelligentInsertBlock(type.key, missing);
+  const mjmlBody = template.mjmlBody || '<mjml><mj-body></mj-body></mjml>';
+  const nextMjml = appendIntelligentBlocks(mjmlBody, insertBlock);
+  const updatedTemplate = await prisma.marketingTemplate.update({
+    where: { id: template.id },
+    data: {
+      mjmlBody: nextMjml,
+    },
+  });
+  await createTemplateVersion(updatedTemplate, req.user?.id);
+  await logMarketingAudit(
+    tenantId,
+    'template.intelligent.blocks.inserted',
+    'MarketingTemplate',
+    template.id,
+    { kind: type.key, missingInserted: missing },
+    actorFrom(req)
+  );
+  console.info('[intelligent] template-insert', { tenantId, templateId, kind: type.key, missing });
+
+  const updatedCheck = evaluateTemplateTags(updatedTemplate, requirements.required);
+  const response = {
+    ok: updatedCheck.missing.length === 0,
+    kind: type.key,
+    templateId,
+    required: requirements.required,
+    missing: updatedCheck.missing,
+    found: updatedCheck.found,
+    updated: true,
+  };
   logMarketingApi(req, response);
   res.json(response);
 });
