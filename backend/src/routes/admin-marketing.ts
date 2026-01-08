@@ -23,7 +23,6 @@ import {
   MarketingPreferenceStatus,
   MarketingSuppressionType,
   MarketingImportJobStatus,
-  MarketingIntelligentCampaignKind,
   MarketingCampaignRecipient,
   MarketingRecipientStatus,
   MarketingSenderMode,
@@ -74,6 +73,13 @@ import { countIntelligentSendsLast30d, hasEmailedShowRecently } from '../service
 import { getTenantUpcomingShows, rankShowsForContact } from '../services/marketing/intelligent/recommendations.js';
 import { hasPurchasedShow } from '../services/marketing/intelligent/suppression.js';
 import { resolveIntelligentConfig, runIntelligentCampaign } from '../services/marketing/intelligent/runner.js';
+import {
+  BUILT_IN_INTELLIGENT_TYPES,
+  DEFAULT_INTELLIGENT_CONFIG,
+  defaultConfigForStrategy,
+  isIntelligentStrategyKey,
+  normalizeIntelligentTypeKey,
+} from '../services/marketing/intelligent/types.js';
 const router = Router();
 const bcrypt: any = (bcryptNS as any).default ?? bcryptNS;
 
@@ -203,13 +209,6 @@ function tenantNameFrom(user: { tradingName?: string | null; companyName?: strin
   return user.tradingName || user.companyName || user.name || 'TIXL';
 }
 
-const DEFAULT_INTELLIGENT_CONFIG = {
-  horizonDays: 90,
-  limit: 6,
-  cooldownDays: 30,
-  maxEmailsPer30DaysPerContact: 3,
-};
-
 async function ensureIntelligentSeedTemplate(tenantId: string) {
   const existingTemplate = await prisma.marketingTemplate.findFirst({
     where: { tenantId },
@@ -250,6 +249,109 @@ async function ensureIntelligentSeedTemplate(tenantId: string) {
     },
     select: { id: true },
   });
+}
+
+type IntelligentCampaignTypeRecord = {
+  key: string;
+  label: string;
+  description: string | null;
+  strategyKey: string;
+  defaultTemplateId: string | null;
+  defaultConfigJson: Prisma.JsonValue;
+};
+
+type IntelligentCampaignConfigRecord = {
+  kind: string;
+  configJson: Prisma.JsonValue;
+  enabled: boolean;
+  templateId: string;
+  lastRunAt: Date | null;
+};
+
+async function ensureIntelligentTypes(tenantId: string): Promise<IntelligentCampaignTypeRecord[]> {
+  const existingTypes = await prisma.marketingIntelligentCampaignType.findMany({
+    where: { tenantId },
+    select: {
+      key: true,
+      label: true,
+      description: true,
+      strategyKey: true,
+      defaultTemplateId: true,
+      defaultConfigJson: true,
+    },
+  });
+  const existingMap = new Map(existingTypes.map((type) => [type.key, type]));
+  const missingTypes = BUILT_IN_INTELLIGENT_TYPES.filter((type) => !existingMap.has(type.key));
+
+  if (missingTypes.length) {
+    const template = await ensureIntelligentSeedTemplate(tenantId);
+    const created = await Promise.all(
+      missingTypes.map((type) =>
+        prisma.marketingIntelligentCampaignType.create({
+          data: {
+            tenantId,
+            key: type.key,
+            label: type.label,
+            description: type.description,
+            strategyKey: type.strategyKey,
+            defaultTemplateId: template.id,
+            defaultConfigJson: type.defaultConfigJson as Prisma.InputJsonValue,
+          },
+          select: {
+            key: true,
+            label: true,
+            description: true,
+            strategyKey: true,
+            defaultTemplateId: true,
+            defaultConfigJson: true,
+          },
+        })
+      )
+    );
+    created.forEach((type) => existingMap.set(type.key, type));
+  }
+
+  return Array.from(existingMap.values());
+}
+
+async function ensureIntelligentCampaignConfigs(
+  tenantId: string,
+  types: IntelligentCampaignTypeRecord[]
+): Promise<Map<string, IntelligentCampaignConfigRecord>> {
+  const items = await prisma.marketingIntelligentCampaign.findMany({
+    where: { tenantId },
+    select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+  });
+  const existingMap = new Map(items.map((item) => [item.kind, item]));
+  const missingTypes = types.filter((type) => !existingMap.has(type.key));
+
+  if (missingTypes.length) {
+    const template = await ensureIntelligentSeedTemplate(tenantId);
+    const created = await Promise.all(
+      missingTypes.map((type) =>
+        prisma.marketingIntelligentCampaign.create({
+          data: {
+            tenantId,
+            kind: type.key,
+            enabled: false,
+            templateId: type.defaultTemplateId || template.id,
+            configJson: type.defaultConfigJson as Prisma.InputJsonValue,
+          },
+          select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+        })
+      )
+    );
+    created.forEach((record) => existingMap.set(record.kind, record));
+  }
+
+  return existingMap;
+}
+
+async function resolveIntelligentType(tenantId: string, rawKind: string) {
+  const kind = normalizeIntelligentTypeKey(rawKind);
+  if (!kind) return null;
+  const types = await ensureIntelligentTypes(tenantId);
+  return types.find((type) => type.key === kind) || null;
 }
 
 function formatShowDate(date?: Date | string | null) {
@@ -1074,51 +1176,126 @@ router.get('/api/marketing/status', requireAdminOrOrganiser, async (req, res) =>
 router.get('/api/marketing/intelligent', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   console.info('[marketing:intelligent:get] request', { tenantId, actor: actorFrom(req) });
-  const items = await prisma.marketingIntelligentCampaign.findMany({
-    where: { tenantId },
-    orderBy: { updatedAt: 'desc' },
-    select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
-  });
-  const existingMap = new Map(items.map((item) => [item.kind, item]));
-  const allKinds = Object.values(MarketingIntelligentCampaignKind);
-  const missingKinds = allKinds.filter((kind) => !existingMap.has(kind));
+  const types = await ensureIntelligentTypes(tenantId);
+  const configMap = await ensureIntelligentCampaignConfigs(tenantId, types);
+  const builtInOrder = BUILT_IN_INTELLIGENT_TYPES.map((type) => type.key);
+  const builtInSet = new Set(builtInOrder);
+  const orderedTypes = [
+    ...types
+      .filter((type) => builtInSet.has(type.key))
+      .sort((a, b) => builtInOrder.indexOf(a.key) - builtInOrder.indexOf(b.key)),
+    ...types
+      .filter((type) => !builtInSet.has(type.key))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ];
 
-  let seededCount = 0;
-  if (missingKinds.length) {
-    const template = await ensureIntelligentSeedTemplate(tenantId);
-    const created = await Promise.all(
-      missingKinds.map((kind) =>
-        prisma.marketingIntelligentCampaign.create({
-          data: {
-            tenantId,
-            kind,
-            enabled: false,
-            templateId: template.id,
-            configJson: DEFAULT_INTELLIGENT_CONFIG,
-          },
-          select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
-        })
-      )
-    );
-    created.forEach((record) => existingMap.set(record.kind, record));
-    seededCount = created.length;
-  }
-
-  const orderedItems = allKinds.map((kind) => {
-    const record = existingMap.get(kind);
+  const items = orderedTypes.map((type) => {
+    const record = configMap.get(type.key);
     return {
-      kind,
-      configJson: record?.configJson ?? DEFAULT_INTELLIGENT_CONFIG,
+      kind: type.key,
+      label: type.label,
+      description: type.description,
+      strategyKey: type.strategyKey,
+      defaultTemplateId: type.defaultTemplateId,
+      configJson: record?.configJson ?? type.defaultConfigJson ?? DEFAULT_INTELLIGENT_CONFIG,
       enabled: record?.enabled ?? false,
       templateId: record?.templateId ?? '',
       lastRunAt: record?.lastRunAt ?? null,
     };
   });
 
-  const response = { ok: true, items: orderedItems };
-  console.info('[marketing:intelligent:get] response', { tenantId, seededCount, total: orderedItems.length });
+  const response = { ok: true, items };
+  console.info('[marketing:intelligent:get] response', { tenantId, total: items.length });
   logMarketingApi(req, response);
   res.json(response);
+});
+
+router.post('/api/marketing/intelligent/types', requireAdminOrOrganiser, async (req, res) => {
+  const tenantId = resolveTenantId(req);
+  const payload = req.body || {};
+  const label = String(payload.label || '').trim();
+  if (!label) {
+    return res.status(400).json({ ok: false, message: 'Label is required.' });
+  }
+
+  const rawKey = hasOwn(payload, 'key') ? String(payload.key || '').trim() : '';
+  const key = normalizeIntelligentTypeKey(rawKey || label);
+  if (!key) {
+    return res.status(400).json({ ok: false, message: 'Invalid key.' });
+  }
+
+  const description = hasOwn(payload, 'description') ? String(payload.description || '').trim() : '';
+  const rawStrategy = String(payload.strategyKey || payload.baseStrategy || '').trim().toUpperCase();
+  if (!isIntelligentStrategyKey(rawStrategy)) {
+    return res.status(400).json({ ok: false, message: 'Invalid strategy key.' });
+  }
+  const strategyKey = rawStrategy;
+
+  const existing = await prisma.marketingIntelligentCampaignType.findFirst({
+    where: { tenantId, key },
+    select: { id: true },
+  });
+  if (existing) {
+    return res.status(400).json({ ok: false, message: 'A campaign type with that key already exists.' });
+  }
+
+  const defaultTemplateIdRaw = hasOwn(payload, 'defaultTemplateId')
+    ? String(payload.defaultTemplateId || '').trim()
+    : '';
+  let defaultTemplateId = defaultTemplateIdRaw || null;
+  if (defaultTemplateId) {
+    const template = await prisma.marketingTemplate.findFirst({
+      where: { tenantId, id: defaultTemplateId },
+      select: { id: true },
+    });
+    if (!template) {
+      return res.status(400).json({ ok: false, message: 'Invalid default template.' });
+    }
+  } else {
+    const template = await ensureIntelligentSeedTemplate(tenantId);
+    defaultTemplateId = template.id;
+  }
+
+  const configJsonInput = hasOwn(payload, 'defaultConfigJson')
+    ? (payload.defaultConfigJson as Prisma.InputJsonValue)
+    : (defaultConfigForStrategy(strategyKey) as Prisma.InputJsonValue);
+
+  const type = await prisma.marketingIntelligentCampaignType.create({
+    data: {
+      tenantId,
+      key,
+      label,
+      description: description || null,
+      strategyKey,
+      defaultTemplateId,
+      defaultConfigJson: configJsonInput,
+    },
+    select: {
+      key: true,
+      label: true,
+      description: true,
+      strategyKey: true,
+      defaultTemplateId: true,
+      defaultConfigJson: true,
+    },
+  });
+
+  const config = await prisma.marketingIntelligentCampaign.create({
+    data: {
+      tenantId,
+      kind: type.key,
+      enabled: false,
+      templateId: defaultTemplateId as string,
+      configJson: configJsonInput,
+    },
+    select: { kind: true, configJson: true, enabled: true, templateId: true, lastRunAt: true },
+  });
+
+  res.json({
+    ok: true,
+    type,
+    config,
+  });
 });
 
 router.get('/api/marketing/intelligent/report', requireAdminOrOrganiser, async (req, res) => {
@@ -1210,15 +1387,13 @@ router.get('/api/marketing/intelligent/report', requireAdminOrOrganiser, async (
 router.put('/api/marketing/intelligent/:kind', requireAdminOrOrganiser, async (req, res) => {
   const tenantId = resolveTenantId(req);
   console.info('[marketing:intelligent:put] request', { tenantId, actor: actorFrom(req), body: req.body });
-  const rawKind = String(req.params.kind || '').trim().toUpperCase();
-  const kind = Object.values(MarketingIntelligentCampaignKind).includes(rawKind as MarketingIntelligentCampaignKind)
-    ? (rawKind as MarketingIntelligentCampaignKind)
-    : null;
-  if (!kind) {
+  const type = await resolveIntelligentType(tenantId, String(req.params.kind || ''));
+  if (!type) {
     const response = { ok: false, message: 'Invalid intelligent campaign kind.' };
     logMarketingApi(req, response);
     return res.status(400).json(response);
   }
+  const kind = type.key;
 
   const payload = req.body || {};
   const templateId = hasOwn(payload, 'templateId') ? String(payload.templateId || '').trim() : undefined;
@@ -1304,13 +1479,12 @@ router.post('/api/marketing/intelligent/:kind/run', requireAdminOrOrganiser, asy
   const tenantId = resolveTenantId(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
-  const rawKind = String(req.params.kind || '').trim().toUpperCase();
-  const kind = Object.values(MarketingIntelligentCampaignKind).includes(rawKind as MarketingIntelligentCampaignKind)
-    ? (rawKind as MarketingIntelligentCampaignKind)
-    : null;
-  if (!kind) {
+  const type = await resolveIntelligentType(tenantId, String(req.params.kind || ''));
+  if (!type) {
     return res.status(400).json({ ok: false, message: 'Invalid intelligent campaign kind.' });
   }
+  const kind = type.key;
+  await ensureIntelligentCampaignConfigs(tenantId, [type]);
   const dryRunProvided = typeof req.body?.dryRun !== 'undefined';
   if (dryRunProvided && typeof req.body?.dryRun !== 'boolean') {
     return res.status(400).json({ ok: false, message: 'dryRun must be a boolean.' });
@@ -1346,18 +1520,33 @@ router.post('/api/marketing/intelligent/:kind/preview', requireAdminOrOrganiser,
   const tenantId = tenantIdFrom(req);
   const role = await assertMarketingRole(req, res, MarketingGovernanceRole.VIEWER);
   if (!role) return;
-  const rawKind = String(req.params.kind || '').trim().toUpperCase();
-  const kind = Object.values(MarketingIntelligentCampaignKind).includes(rawKind as MarketingIntelligentCampaignKind)
-    ? (rawKind as MarketingIntelligentCampaignKind)
-    : null;
-  if (!kind) {
+  const type = await resolveIntelligentType(tenantId, String(req.params.kind || ''));
+  if (!type) {
     return res.status(400).json({ ok: false, message: 'Invalid intelligent campaign kind.' });
   }
+  const kind = type.key;
 
-  const config = await prisma.marketingIntelligentCampaign.findFirst({
+  let config = await prisma.marketingIntelligentCampaign.findFirst({
     where: { tenantId, kind },
     include: { template: true },
   });
+  if (!config) {
+    const seedTemplate = await ensureIntelligentSeedTemplate(tenantId);
+    const templateId = type.defaultTemplateId || seedTemplate.id;
+    await prisma.marketingIntelligentCampaign.create({
+      data: {
+        tenantId,
+        kind,
+        enabled: false,
+        templateId,
+        configJson: type.defaultConfigJson as Prisma.InputJsonValue,
+      },
+    });
+    config = await prisma.marketingIntelligentCampaign.findFirst({
+      where: { tenantId, kind },
+      include: { template: true },
+    });
+  }
   if (!config || !config.template) {
     return res.status(404).json({ ok: false, message: 'Intelligent campaign not configured.' });
   }

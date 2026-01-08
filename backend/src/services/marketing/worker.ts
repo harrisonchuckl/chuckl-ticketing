@@ -14,7 +14,6 @@ import {
   MarketingCampaignStatus,
   MarketingCampaignType,
   MarketingConsentStatus,
-  MarketingIntelligentCampaignKind,
   MarketingRecipientStatus,
   OrderStatus,
   ShowStatus,
@@ -38,6 +37,11 @@ import { buildContactPurchaseSignals } from './intelligent/recommendations.js';
 import { hasPurchasedShow } from './intelligent/suppression.js';
 import { shouldSuppressContact } from './campaigns.js';
 import { buildRecommendedAddonsHtml } from './intelligent/blocks.js';
+import {
+  DEFAULT_ADDON_UPSELL_CONFIG,
+  DEFAULT_ALMOST_SOLD_OUT_CONFIG,
+  IntelligentStrategyKey,
+} from './intelligent/types.js';
 
 let interval: NodeJS.Timeout | null = null;
 
@@ -64,18 +68,7 @@ export async function runMarketingWorkerOnce() {
 }
 
 async function processMonthlyDigestIntelligentCampaigns() {
-  const configs = await prisma.marketingIntelligentCampaign.findMany({
-    where: {
-      kind: MarketingIntelligentCampaignKind.MONTHLY_DIGEST,
-      enabled: true,
-    },
-    select: {
-      id: true,
-      tenantId: true,
-      lastRunAt: true,
-      configJson: true,
-    },
-  });
+  const configs = await fetchIntelligentConfigsByStrategy('MONTHLY_DIGEST');
 
   for (const config of configs) {
     const runAt = new Date();
@@ -84,7 +77,7 @@ async function processMonthlyDigestIntelligentCampaigns() {
 
     const result = await runIntelligentCampaign({
       tenantId: config.tenantId,
-      kind: MarketingIntelligentCampaignKind.MONTHLY_DIGEST,
+      kind: config.kind,
       dryRun: false,
       runAt,
     });
@@ -124,23 +117,34 @@ function shouldRunForDay(lastRunAt: Date | null, now: Date) {
   );
 }
 
+async function fetchIntelligentConfigsByStrategy(
+  strategyKey: IntelligentStrategyKey,
+  options: { includeTemplate?: boolean } = {}
+) {
+  const types = await prisma.marketingIntelligentCampaignType.findMany({
+    where: { strategyKey },
+    select: { tenantId: true, key: true },
+  });
+  if (!types.length) return [];
+  const typeConditions = types.map((type) => ({ tenantId: type.tenantId, kind: type.key }));
+  if (options.includeTemplate) {
+    return prisma.marketingIntelligentCampaign.findMany({
+      where: { enabled: true, OR: typeConditions },
+      include: { template: true },
+    });
+  }
+  return prisma.marketingIntelligentCampaign.findMany({
+    where: { enabled: true, OR: typeConditions },
+    select: { id: true, tenantId: true, kind: true, lastRunAt: true, configJson: true, templateId: true },
+  });
+}
+
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 
-const DEFAULT_ALMOST_SOLD_OUT_THRESHOLD = 20;
-const DEFAULT_ALMOST_SOLD_OUT_COOLDOWN_DAYS = 30;
-const DEFAULT_ALMOST_SOLD_OUT_HORIZON_DAYS = 90;
-const DEFAULT_ADDON_UPSELL_LOOKBACK_DAYS = 30;
-const DEFAULT_ADDON_UPSELL_COOLDOWN_DAYS = 30;
 
 async function processAlmostSoldOutIntelligentCampaigns() {
-  const configs = await prisma.marketingIntelligentCampaign.findMany({
-    where: {
-      kind: MarketingIntelligentCampaignKind.ALMOST_SOLD_OUT,
-      enabled: true,
-    },
-    include: { template: true },
-  });
+  const configs = await fetchIntelligentConfigsByStrategy('ALMOST_SOLD_OUT', { includeTemplate: true });
 
   for (const config of configs) {
     const runAt = new Date();
@@ -187,7 +191,7 @@ async function processAlmostSoldOutIntelligentCampaigns() {
       const remaining = await getRemainingTickets(show.id);
       if (remaining === null || remaining > threshold) continue;
 
-      const campaignName = `IC: ALMOST_SOLD_OUT ${show.id} ${runDateLabel}`;
+      const campaignName = `IC: ${config.kind} ${show.id} ${runDateLabel}`;
       const existing = await prisma.marketingCampaign.findFirst({
         where: { tenantId: config.tenantId, name: campaignName },
         select: { id: true },
@@ -281,6 +285,7 @@ async function processAlmostSoldOutIntelligentCampaigns() {
           },
         }) as Record<string, any>;
 
+        mergeContext.meta = { ...(mergeContext.meta || {}), kind: config.kind };
         mergeContext.showId = show.id;
         mergeContext.ticketsRemaining = remaining;
         mergeContext.show = {
@@ -380,13 +385,7 @@ async function processAlmostSoldOutIntelligentCampaigns() {
 }
 
 async function processAddonUpsellIntelligentCampaigns() {
-  const configs = await prisma.marketingIntelligentCampaign.findMany({
-    where: {
-      kind: MarketingIntelligentCampaignKind.ADDON_UPSELL,
-      enabled: true,
-    },
-    include: { template: true },
-  });
+  const configs = await fetchIntelligentConfigsByStrategy('ADDON_UPSELL', { includeTemplate: true });
 
   for (const config of configs) {
     const runAt = new Date();
@@ -579,7 +578,7 @@ async function processAddonUpsellIntelligentCampaigns() {
       });
       const suppressionMap = new Map(suppressions.map((suppression) => [normaliseEmail(suppression.email), suppression]));
 
-      const campaignName = `IC: ADDON_UPSELL ${showId} ${runDateLabel}`;
+      const campaignName = `IC: ${config.kind} ${showId} ${runDateLabel}`;
       const existing = await prisma.marketingCampaign.findFirst({
         where: { tenantId: config.tenantId, name: campaignName },
         select: { id: true },
@@ -672,6 +671,7 @@ async function processAddonUpsellIntelligentCampaigns() {
           },
         });
 
+        baseMergeContext.meta = { ...(baseMergeContext.meta || {}), kind: config.kind };
         const mergeContext = {
           ...baseMergeContext,
           showId,
@@ -770,9 +770,9 @@ async function processAddonUpsellIntelligentCampaigns() {
 
 function resolveAlmostSoldOutConfig(configJson: unknown) {
   const base = {
-    threshold: DEFAULT_ALMOST_SOLD_OUT_THRESHOLD,
-    cooldownDays: DEFAULT_ALMOST_SOLD_OUT_COOLDOWN_DAYS,
-    horizonDays: DEFAULT_ALMOST_SOLD_OUT_HORIZON_DAYS,
+    threshold: DEFAULT_ALMOST_SOLD_OUT_CONFIG.threshold,
+    cooldownDays: DEFAULT_ALMOST_SOLD_OUT_CONFIG.cooldownDays,
+    horizonDays: DEFAULT_ALMOST_SOLD_OUT_CONFIG.horizonDays,
   };
   if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) {
     return base;
@@ -790,8 +790,8 @@ function resolveAlmostSoldOutConfig(configJson: unknown) {
 
 function resolveAddonUpsellConfig(configJson: unknown) {
   const base = {
-    lookbackDays: DEFAULT_ADDON_UPSELL_LOOKBACK_DAYS,
-    cooldownDays: DEFAULT_ADDON_UPSELL_COOLDOWN_DAYS,
+    lookbackDays: DEFAULT_ADDON_UPSELL_CONFIG.lookbackDays,
+    cooldownDays: DEFAULT_ADDON_UPSELL_CONFIG.cooldownDays,
   };
   if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) {
     return base;

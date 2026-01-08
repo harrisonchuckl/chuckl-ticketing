@@ -262,13 +262,6 @@ enum MarketingTemplateChangeStatus {
   REJECTED
 }
 
-enum MarketingIntelligentCampaignKind {
-  MONTHLY_DIGEST
-  NEW_ON_SALE_BATCH
-  ALMOST_SOLD_OUT
-  ADDON_UPSELL
-}
-
 enum MarketingAutomationTriggerType {
   AFTER_PURCHASE
   NO_PURCHASE_DAYS
@@ -484,6 +477,7 @@ model User {
   marketingDailyEventRollups              MarketingDailyEventRollup[]
   marketingEmailEventReceipts             MarketingEmailEventReceipt[]
   marketingIntelligentCampaigns           MarketingIntelligentCampaign[]
+  marketingIntelligentCampaignTypes       MarketingIntelligentCampaignType[]
   campaignDrafts                          CampaignDraft[]
   upsellBundles                           UpsellBundle[]
 
@@ -2022,7 +2016,7 @@ model MarketingCampaign {
 model MarketingIntelligentCampaign {
   id         String                           @id @default(cuid())
   tenantId   String
-  kind       MarketingIntelligentCampaignKind
+  kind       String
   enabled    Boolean                          @default(true)
   templateId String
   configJson Json
@@ -2035,6 +2029,25 @@ model MarketingIntelligentCampaign {
 
   @@index([tenantId])
   @@index([templateId])
+}
+
+model MarketingIntelligentCampaignType {
+  id                String   @id @default(cuid())
+  tenantId          String
+  key               String
+  label             String
+  description       String?
+  strategyKey       String
+  defaultTemplateId String?
+  defaultConfigJson Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant          User               @relation(fields: [tenantId], references: [id])
+  defaultTemplate MarketingTemplate? @relation(fields: [defaultTemplateId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
 }
 
 model MarketingCampaignRecipient {
