@@ -2944,6 +2944,11 @@ router.get(
       cursor:pointer;
       transition:all .3s ease;
     }
+    .ps-upload-zone.is-dragover{
+      border-color:#009fe3;
+      background:rgba(0,159,227,.12);
+      transform:scale(1.01);
+    }
     .ps-upload-zone:hover{
       border-color:#009fe3;
       background:rgba(0,159,227,.08);
@@ -2969,6 +2974,37 @@ router.get(
       display:grid;
       gap:12px;
       margin-top:16px;
+    }
+    .ps-image-row{
+      display:grid;
+      grid-template-columns:80px 1fr auto;
+      gap:12px;
+      align-items:center;
+      padding:10px 12px;
+      background:#f8fafc;
+      border:1px solid #cbd5e0;
+      border-radius:12px;
+    }
+    .ps-image-thumb{
+      width:80px;
+      height:80px;
+      border-radius:10px;
+      overflow:hidden;
+      background:#e2e8f0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .ps-image-thumb img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      display:block;
+    }
+    .ps-upload-note{
+      margin-top:10px;
+      font-size:13px;
+      color:#64748b;
     }
     .ps-inline-row{
       display:grid;
@@ -3028,6 +3064,7 @@ router.get(
       cursor:pointer;
       transition:all .3s ease;
       width:100%;
+      margin-top:12px;
     }
     .ps-variant-btn:hover{
       background:rgba(0,159,227,.15);
@@ -15396,9 +15433,11 @@ function renderInterests(customer){
       +         '<div class="ps-upload-zone" id="ps_add_image">'
       +           '<div class="ps-upload-icon">+</div>'
       +           '<div class="ps-upload-text">Add photos</div>'
-      +           '<div class="ps-upload-hint">Use bright, square images for best results</div>'
+      +           '<div class="ps-upload-hint">Drag &amp; drop or click to upload (up to 10 images)</div>'
       +         '</div>'
+      +         '<input id="ps_image_input" type="file" accept="image/*" multiple style="display:none" />'
       +         '<div id="ps_image_rows" class="ps-inline-list"></div>'
+      +         '<div id="ps_image_msg" class="ps-upload-note"></div>'
       +       '</div>'
       +       '<div class="ps-section-card full">'
       +         '<div class="ps-section-number">02</div>'
@@ -15452,8 +15491,8 @@ function renderInterests(customer){
       +         '<h3 class="ps-section-title">Pricing</h3>'
       +         '<p class="ps-section-desc">Set a simple price or allow custom amounts.</p>'
       +         '<label class="ps-form-field">'
-      +           '<span class="ps-form-label">Price (pence)</span>'
-      +           '<input id="ps_prod_price" class="ps-input" placeholder="1000" type="number" />'
+      +           '<span class="ps-form-label">Price (£)</span>'
+      +           '<input id="ps_prod_price" class="ps-input" placeholder="10.00" type="number" step="0.01" />'
       +         '</label>'
       +         '<label class="ps-checkbox">'
       +           '<input type="checkbox" id="ps_prod_custom" /> Allow custom amount'
@@ -15531,6 +15570,20 @@ function renderInterests(customer){
         .replace(/-{2,}/g, '-');
     }
 
+    function poundsFromPence(value){
+      if (value === null || value === undefined || value === '') return '';
+      var parsed = Number(value);
+      if (!Number.isFinite(parsed)) return '';
+      return (parsed / 100).toFixed(2);
+    }
+
+    function penceFromPounds(value){
+      if (value === null || value === undefined || value === '') return '';
+      var parsed = Number(value);
+      if (!Number.isFinite(parsed)) return '';
+      return Math.round(parsed * 100);
+    }
+
     function addVariantRow(data){
       var row = document.createElement('div');
       row.className = 'ps-inline-row';
@@ -15552,21 +15605,22 @@ function renderInterests(customer){
 
     function addImageRow(data){
       var row = document.createElement('div');
-      row.className = 'ps-inline-row';
+      row.className = 'ps-image-row';
+      row.setAttribute('data-url', data.url || '');
       row.innerHTML = ''
-        + '<input class="ps-input" placeholder="Image URL" data-field="url" />'
-        + '<input class="ps-input" placeholder="Sort order" type="number" data-field="sort" />'
+        + '<div class="ps-image-thumb">'
+        +   '<img src="' + escapeHtml(data.url || '') + '" alt="Product image" />'
+        + '</div>'
+        + '<div>'
+        +   '<div style="font-weight:600; color:#1e293b;">Image</div>'
+        +   '<div class="muted" style="font-size:13px; word-break:break-all;">' + escapeHtml(data.url || '') + '</div>'
+        + '</div>'
         + '<button class="ps-inline-btn" data-remove>Remove</button>';
       $('#ps_image_rows').appendChild(row);
-      if (data){
-        row.querySelector('[data-field="url"]').value = data.url || '';
-        row.querySelector('[data-field="sort"]').value = firstDefined(data.sortOrder, '');
-      }
       row.querySelector('[data-remove]').addEventListener('click', function(){ row.remove(); });
     }
 
     $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
-    $('#ps_add_image').addEventListener('click', function(){ addImageRow(); });
     $('#ps_prod_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
     var cancelBtn = $('#ps_prod_cancel');
     if (cancelBtn){
@@ -15593,6 +15647,78 @@ function renderInterests(customer){
       });
     }
 
+    $('#ps_prod_status').value = 'ACTIVE';
+
+    function setImageMessage(message){
+      var msg = $('#ps_image_msg');
+      if (msg) msg.textContent = message || '';
+    }
+
+    async function handleImageFiles(fileList){
+      var files = Array.prototype.slice.call(fileList || []).filter(function(file){
+        return file && String(file.type || '').startsWith('image/');
+      });
+      if (!files.length) return;
+
+      var currentCount = $('#ps_image_rows').children.length;
+      var remaining = 10 - currentCount;
+      if (remaining <= 0){
+        setImageMessage('You can upload up to 10 images.');
+        return;
+      }
+      if (files.length > remaining){
+        setImageMessage('Only ' + remaining + ' more image' + (remaining === 1 ? '' : 's') + ' can be uploaded.');
+        files = files.slice(0, remaining);
+      } else {
+        setImageMessage('');
+      }
+
+      var zone = $('#ps_add_image');
+      if (zone) zone.classList.add('is-dragover');
+      setImageMessage('Uploading images...');
+
+      var hadError = false;
+      for (var i = 0; i < files.length; i++){
+        var file = files[i];
+        try{
+          var upload = await uploadPoster(file);
+          if (upload && upload.url){
+            addImageRow({ url: upload.url });
+          }
+        }catch(err){
+          setImageMessage('Image upload failed. Please try again.');
+          hadError = true;
+        }
+      }
+
+      if (zone) zone.classList.remove('is-dragover');
+      if (!hadError) setImageMessage('');
+    }
+
+    var imageZone = $('#ps_add_image');
+    var imageInput = $('#ps_image_input');
+    if (imageZone && imageInput){
+      imageZone.addEventListener('click', function(){
+        imageInput.click();
+      });
+      imageInput.addEventListener('change', function(){
+        handleImageFiles(imageInput.files);
+        imageInput.value = '';
+      });
+      imageZone.addEventListener('dragover', function(event){
+        event.preventDefault();
+        imageZone.classList.add('is-dragover');
+      });
+      imageZone.addEventListener('dragleave', function(){
+        imageZone.classList.remove('is-dragover');
+      });
+      imageZone.addEventListener('drop', function(event){
+        event.preventDefault();
+        imageZone.classList.remove('is-dragover');
+        handleImageFiles(event.dataTransfer ? event.dataTransfer.files : []);
+      });
+    }
+
     $('#ps_prod_title').addEventListener('input', function(){
       if (!$('#ps_prod_slug').value){
         $('#ps_prod_slug').value = slugifyLocal($('#ps_prod_title').value);
@@ -15614,8 +15740,8 @@ function renderInterests(customer){
     function collectImages(){
       return Array.prototype.slice.call($('#ps_image_rows').children).map(function(row, index){
         return {
-          url: row.querySelector('[data-field="url"]').value.trim(),
-          sortOrder: row.querySelector('[data-field="sort"]').value || index,
+          url: row.getAttribute('data-url') || '',
+          sortOrder: index,
         };
       }).filter(function(i){ return i.url; });
     }
@@ -15631,8 +15757,8 @@ function renderInterests(customer){
         $('#ps_prod_desc').value = p.description || '';
         $('#ps_prod_category').value = p.category || 'MERCH';
         $('#ps_prod_fulfilment').value = p.fulfilmentType || 'NONE';
-        $('#ps_prod_status').value = p.status || 'DRAFT';
-        $('#ps_prod_price').value = firstDefined(p.pricePence, '');
+        $('#ps_prod_status').value = p.status || 'ACTIVE';
+        $('#ps_prod_price').value = poundsFromPence(firstDefined(p.pricePence, ''));
         $('#ps_prod_custom').checked = !!p.allowCustomAmount;
         $('#ps_prod_inventory').value = p.inventoryMode || 'UNLIMITED';
         $('#ps_prod_stock').value = firstDefined(p.stockCount, '');
@@ -15658,7 +15784,7 @@ function renderInterests(customer){
           category: $('#ps_prod_category').value,
           fulfilmentType: $('#ps_prod_fulfilment').value,
           status: $('#ps_prod_status').value,
-          pricePence: $('#ps_prod_price').value,
+          pricePence: penceFromPounds($('#ps_prod_price').value),
           allowCustomAmount: $('#ps_prod_custom').checked,
           inventoryMode: $('#ps_prod_inventory').value,
           stockCount: $('#ps_prod_stock').value,
