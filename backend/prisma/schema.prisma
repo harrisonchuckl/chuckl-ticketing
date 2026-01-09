@@ -68,6 +68,8 @@ enum ProductFulfilmentType {
   EMAIL
   PRINTFUL
   NONE
+  COLLECT_AT_SHOW
+
 }
 
 enum PrintfulShippingPolicy {
