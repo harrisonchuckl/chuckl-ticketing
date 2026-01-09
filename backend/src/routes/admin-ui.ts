@@ -583,7 +583,7 @@ router.get("/ui/login", (req, res) => {
         return;
       }
 
-      requestMsg.textContent = "Thanks! We'll review your request and email you once approved.";
+      requestMsg.textContent = "Thanks! We will review your request and email you once approved.";
       requestMsg.className = "msg ok";
       requestForm.reset();
     }catch(err){
@@ -4971,7 +4971,7 @@ document.addEventListener('click', function(e){
       +      '</div>'
       +      '<div class="feature-badge">Sell More Automatically</div>'
       +      '<h3 class="feature-title">Personalised Recommendations</h3>'
-      +      '<p class="feature-description">Help returning customers find shows they\'ll love faster.</p>'
+      +      '<p class="feature-description">Help returning customers find shows they will love faster.</p>'
       +      '<ul class="feature-list">'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>"Recommended for you" on organiser pages and storefront</span></li>'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Based on behaviour (views, purchases, location, preferences)</span></li>'
