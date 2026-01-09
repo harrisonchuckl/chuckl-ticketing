@@ -395,14 +395,17 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
     });
 
     const variants = Array.isArray(payload.variants) ? payload.variants : [];
-    const rawImages = Array.isArray(payload.images) ? payload.images : [];
+    type RawImageInput = { url?: unknown; sortOrder?: unknown };
+    const rawImages = Array.isArray(payload.images)
+      ? (payload.images as RawImageInput[])
+      : [];
     // Drop image entries without a valid URL to avoid failing the whole request.
     const images = rawImages
-      .map((img: any, index: number) => ({
+      .map((img, index: number) => ({
         url: String(img?.url || "").trim(),
         sortOrder: Number(img?.sortOrder ?? index),
       }))
-      .filter((img: { url: string }) => img.url);
+      .filter((img) => img.url);
 
     if (variants.length) {
       await prisma.productVariant.createMany({
