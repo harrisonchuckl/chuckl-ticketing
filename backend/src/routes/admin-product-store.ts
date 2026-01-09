@@ -63,6 +63,77 @@ function createErrorId() {
   return randomUUID().split("-")[0];
 }
 
+function safeBodyPreview(body: any) {
+  if (!body || typeof body !== "object") return body;
+  const entries = Object.entries(body).slice(0, 12);
+  const preview: Record<string, any> = {};
+  for (const [key, value] of entries) {
+    if (typeof value === "string") {
+      preview[key] = value.length > 120 ? `${value.slice(0, 120)}…` : value;
+    } else if (typeof value === "number" || typeof value === "boolean" || value === null) {
+      preview[key] = value;
+    } else if (Array.isArray(value)) {
+      preview[key] = `[array:${value.length}]`;
+    } else {
+      preview[key] = "[object]";
+    }
+  }
+  return preview;
+}
+
+function buildLogContext(req: any, errorId: string) {
+  return {
+    errorId,
+    userId: req.user?.id || null,
+    role: req.user?.role || null,
+    path: req.path,
+    query: req.query,
+    bodyPreview: safeBodyPreview(req.body),
+  };
+}
+
+function prismaErrorResponse(res: any, req: any, handler: string, err: any, errorId: string, fallback: string) {
+  const showDetails = process.env.NODE_ENV !== "production";
+  const logContext = buildLogContext(req, errorId);
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    console.error(`[product-store] ${handler} failed`, logContext, err);
+    if (err.code === "P2002") {
+      return res.status(409).json({
+        ok: false,
+        error: "Unique constraint violated",
+        code: "UNIQUE_CONSTRAINT",
+        errorId,
+        details: showDetails ? err.message : undefined,
+      });
+    }
+    return res.status(422).json({
+      ok: false,
+      error: "Invalid request",
+      code: "PRISMA_VALIDATION",
+      errorId,
+      details: showDetails ? err.message : undefined,
+    });
+  }
+  if (err instanceof Prisma.PrismaClientValidationError) {
+    console.error(`[product-store] ${handler} failed`, logContext, err);
+    return res.status(422).json({
+      ok: false,
+      error: "Invalid request",
+      code: "PRISMA_VALIDATION",
+      errorId,
+      details: showDetails ? err.message : undefined,
+    });
+  }
+  console.error(`[product-store] ${handler} failed`, logContext, err);
+  return res.status(500).json({
+    ok: false,
+    error: fallback,
+    code: "INTERNAL_ERROR",
+    errorId,
+    details: showDetails ? String(err?.message || err) : undefined,
+  });
+}
+
 router.get("/product-store/storefront", requireAdminOrOrganiser, async (req, res) => {
   try {
     const { storefront } = await loadStorefrontForRequest(req);
@@ -146,7 +217,21 @@ router.post("/product-store/storefront", requireAdminOrOrganiser, async (req, re
 
 router.get("/product-store/summary", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { storefront } = await loadStorefrontForRequest(req);
+    let storefrontResult;
+    try {
+      storefrontResult = await loadStorefrontForRequest(req);
+    } catch (err: any) {
+      const errorId = createErrorId();
+      console.error("[product-store] summary fetch failed", buildLogContext(req, errorId), err);
+      return res.status(400).json({
+        ok: false,
+        error: "Storefront owner could not be determined",
+        code: "MISSING_OWNER",
+        errorId,
+      });
+    }
+
+    const { storefront } = storefrontResult;
     if (!storefront) return res.json({ ok: true, summary: null });
 
     const [activeCount, draftCount, archivedCount] = await Promise.all([
@@ -250,19 +335,79 @@ router.get("/product-store/summary", requireAdminOrOrganiser, async (req, res) =
       },
     });
   } catch (err: any) {
-    console.error("[product-store] summary fetch failed", err);
-    return res.status(500).json({ ok: false, error: "Failed to load summary" });
+    const errorId = createErrorId();
+    return prismaErrorResponse(res, req, "summary fetch", err, errorId, "Failed to load summary");
   }
 });
 
 router.get("/product-store/products", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { storefront } = await loadStorefrontForRequest(req);
+    let storefrontResult;
+    try {
+      storefrontResult = await loadStorefrontForRequest(req);
+    } catch (err: any) {
+      const errorId = createErrorId();
+      console.error("[product-store] products fetch failed", buildLogContext(req, errorId), err);
+      return res.status(400).json({
+        ok: false,
+        error: "Storefront owner could not be determined",
+        code: "MISSING_OWNER",
+        errorId,
+      });
+    }
+
+    const { storefront } = storefrontResult;
     if (!storefront) return res.json({ ok: true, products: [] });
 
-    const status = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
-    const category = typeof req.query.category === "string" ? req.query.category.toUpperCase() : "";
-    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const queryErrors: string[] = [];
+    const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
+    const categoryRaw = typeof req.query.category === "string" ? req.query.category.trim() : "";
+    const qRaw = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const searchRaw = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const status = statusRaw ? statusRaw.toUpperCase() : "";
+    const category = categoryRaw ? categoryRaw.toUpperCase() : "";
+    const q = qRaw || searchRaw;
+
+    if (status && !productStatusValues.has(status)) queryErrors.push("status");
+    if (category && !productCategoryValues.has(category)) queryErrors.push("category");
+
+    const limitRaw = parseIntOrNull(req.query.limit);
+    const offsetRaw = parseIntOrNull(req.query.offset);
+    const maxLimit = 100;
+    let limit = 50;
+    let offset = 0;
+
+    if (limitRaw !== null) {
+      if (limitRaw <= 0) {
+        queryErrors.push("limit");
+      } else {
+        limit = Math.min(limitRaw, maxLimit);
+      }
+    }
+    if (offsetRaw !== null) {
+      if (offsetRaw < 0) {
+        queryErrors.push("offset");
+      } else {
+        offset = offsetRaw;
+      }
+    }
+
+    if (queryErrors.length) {
+      const errorId = createErrorId();
+      const showDetails = process.env.NODE_ENV !== "production";
+      console.error(
+        "[product-store] products fetch failed",
+        buildLogContext(req, errorId),
+        { invalid: queryErrors }
+      );
+      return res.status(422).json({
+        ok: false,
+        error: "Invalid query parameters",
+        code: "INVALID_QUERY",
+        errorId,
+        details: showDetails ? { invalid: queryErrors } : undefined,
+      });
+    }
 
     const where: Prisma.ProductWhereInput = { storefrontId: storefront.id };
     if (status) where.status = status as ProductStatus;
@@ -278,12 +423,14 @@ router.get("/product-store/products", requireAdminOrOrganiser, async (req, res) 
       where,
       include: { variants: true, images: true },
       orderBy: { updatedAt: "desc" },
+      take: limit,
+      skip: offset,
     });
 
     return res.json({ ok: true, products });
   } catch (err: any) {
-    console.error("[product-store] products fetch failed", err);
-    return res.status(500).json({ ok: false, error: "Failed to load products" });
+    const errorId = createErrorId();
+    return prismaErrorResponse(res, req, "products fetch", err, errorId, "Failed to load products");
   }
 });
 
@@ -756,7 +903,21 @@ router.delete("/product-store/upsells/:id", requireAdminOrOrganiser, async (req,
 
 router.get("/product-store/options", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { storefront } = await loadStorefrontForRequest(req);
+    let storefrontResult;
+    try {
+      storefrontResult = await loadStorefrontForRequest(req);
+    } catch (err: any) {
+      const errorId = createErrorId();
+      console.error("[product-store] options fetch failed", buildLogContext(req, errorId), err);
+      return res.status(400).json({
+        ok: false,
+        error: "Storefront owner could not be determined",
+        code: "MISSING_OWNER",
+        errorId,
+      });
+    }
+
+    const { storefront } = storefrontResult;
     if (!storefront) return res.json({ ok: true, shows: [], products: [] });
 
     const shows = await prisma.show.findMany({
@@ -773,8 +934,8 @@ router.get("/product-store/options", requireAdminOrOrganiser, async (req, res) =
 
     return res.json({ ok: true, shows, products });
   } catch (err: any) {
-    console.error("[product-store] options fetch failed", err);
-    return res.status(500).json({ ok: false, error: "Failed to load options" });
+    const errorId = createErrorId();
+    return prismaErrorResponse(res, req, "options fetch", err, errorId, "Failed to load options");
   }
 });
 
