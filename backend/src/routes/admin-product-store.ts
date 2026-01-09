@@ -305,6 +305,9 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
   try {
     const { storefront, ownerUserId } = await loadStorefrontForRequest(req);
     const activeStorefront = storefront ?? (await ensureStorefrontForUser(ownerUserId));
+    if (!activeStorefront) {
+      return res.status(404).json({ ok: false, error: "Storefront not found" });
+    }
 
     const payload = req.body || {};
     const title = String(payload.title || "").trim();
