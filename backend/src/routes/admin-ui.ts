@@ -1514,6 +1514,11 @@ router.get(
       padding:calc(var(--topbar-height) + 24px) 24px 24px calc(var(--sidebar-width) + 24px);
       min-height:100vh;
     }
+
+.admin-main.compact-header{
+      padding-top:calc(var(--topbar-height) + 12px);
+    }
+    
     .page-header{
       display:flex;
       align-items:flex-end;
@@ -4538,6 +4543,12 @@ router.get(
 
   function renderTabs(state){
     if (!pageTabs || !pageTitle) return;
+
+     var adminMain = document.querySelector('.admin-main');
+    if (adminMain){
+      adminMain.classList.toggle('compact-header', state.sectionKey === 'products');
+    }
+    
     var section = NAV[state.sectionKey];
     if (!section){
       pageTitle.textContent = 'Admin';
@@ -4546,7 +4557,13 @@ router.get(
       if (pageHeader) pageHeader.classList.remove('is-hidden');
       return;
     }
-    if (pageHeader) pageHeader.classList.toggle('is-hidden', state.sectionKey === 'overview');
+ if (pageHeader) pageHeader.classList.toggle('is-hidden', state.sectionKey === 'overview' || state.sectionKey === 'products');
+    if (state.sectionKey === 'products'){
+      pageTitle.textContent = '';
+      if (pageSubtitle) pageSubtitle.textContent = '';
+      pageTabs.innerHTML = '';
+      return;
+    }
     pageTitle.textContent = section.title;
     if (pageSubtitle) pageSubtitle.textContent = section.subtitle || '';
     pageTabs.innerHTML = section.tabs.map(function(tab){
