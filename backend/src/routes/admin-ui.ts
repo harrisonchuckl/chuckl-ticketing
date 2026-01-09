@@ -1,3 +1,8 @@
+import { Router } from "express";
+
+const router = Router();
+
+const adminUiScript = String.raw`
   ensureHeadAsset('ps-tailwind', 'script', { src: 'https://cdn.tailwindcss.com' });
   ensureHeadAsset('ps-fonts', 'link', {
     rel: 'stylesheet',
@@ -305,3 +310,42 @@
       setActiveTab(popTab, { updateUrl: false, remember: false });
     }
   });
+`;
+
+const adminUiHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chuckl Product Store</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; }
+    #admin-products-root { min-height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="admin-products-root"></div>
+  <script>
+    const main = document.getElementById('admin-products-root');
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+    const ensureHeadAsset = (id, tag, attrs) => {
+      if (document.getElementById(id)) return;
+      const el = document.createElement(tag);
+      el.id = id;
+      Object.entries(attrs || {}).forEach(([key, value]) => {
+        el.setAttribute(key, value);
+      });
+      document.head.appendChild(el);
+    };
+  </script>
+  <script>${adminUiScript}</script>
+</body>
+</html>`;
+
+router.get("/products", (_req, res) => {
+  res.set("Content-Type", "text/html");
+  res.send(adminUiHtml);
+});
+
+export default router;
