@@ -1212,21 +1212,29 @@ router.get(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Organiser Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
  :root{
-  --bg:#f7f8fb;
+  --bg:#f8fafc;
   --panel:#ffffff;
-  --border:#e5e7eb;
-  --text:#111827;
-  --muted:#6b7280;
-  --ink:#111827;
+  --border:#e2e8f0;
+  --text:#0f172a;
+  --muted:#64748b;
+  --ink:#0f172a;
+  --text-secondary:#64748b;
+  --active-bg:#f1f5f9;
 
-  /* Global fixed header height */
-  --header-h:56px;
-  --sidebar-width:280px;
+  --topbar-height:70px;
+  --header-h:var(--topbar-height);
+  --sidebar-width:100px;
+
+  --primary:#009fe3;
+  --primary-hover:#0080b8;
 
   /* TixAll AI highlight */
- --ai:#009fe3;
+  --ai:#009fe3;
 }
 
 
@@ -1235,57 +1243,56 @@ router.get(
       margin:0;
       padding:0;
       height:100%;
-      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+      font-family:"Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
       color:var(--text);
       background:var(--bg);
     }
     .admin-shell{
       min-height:100vh;
-      display:grid;
-      grid-template-columns:72px 1fr;
-      grid-template-rows:var(--header-h) 1fr;
       background:var(--bg);
     }
     .admin-topbar{
-      grid-column:1 / -1;
-      position:sticky;
+      position:fixed;
       top:0;
-      z-index:20;
-      height:var(--header-h);
+      left:0;
+      right:0;
+      z-index:200;
+      height:var(--topbar-height);
       display:flex;
       align-items:center;
       justify-content:space-between;
       gap:16px;
-      padding:0 20px;
-      background:var(--panel);
+      padding:0 24px;
+      background:#ffffff;
       border-bottom:1px solid var(--border);
     }
     .topbar-left{
       display:flex;
       align-items:center;
-      gap:12px;
+      gap:10px;
     }
-    .icon-btn{
+    .sidebar-toggle{
       height:36px;
       width:36px;
-      border-radius:12px;
+      border-radius:10px;
       border:1px solid var(--border);
       background:#fff;
-      display:grid;
+      display:none;
       place-items:center;
       cursor:pointer;
     }
-    .icon-btn svg{ width:18px; height:18px; }
-    .topbar-brand{
+    .sidebar-toggle svg{ width:18px; height:18px; }
+    .topbar-logo{
       display:flex;
       align-items:center;
-      gap:10px;
+      gap:8px;
       text-decoration:none;
-      color:inherit;
-      font-weight:600;
+      font-size:22px;
+      font-weight:700;
+      color:var(--primary);
     }
-    .topbar-brand img{
-      height:32px;
+    .topbar-logo img{
+      height:30px;
       width:auto;
       display:block;
     }
@@ -1294,122 +1301,218 @@ router.get(
       align-items:center;
       gap:12px;
     }
-    .dropdown{
+    .create-menu,
+    .user-menu{
       position:relative;
     }
-    .dropdown-btn{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      height:36px;
-      padding:0 12px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:#fff;
+    .create-btn{
+      background:var(--primary);
+      color:#ffffff;
+      border:none;
+      padding:10px 20px;
+      border-radius:8px;
+      font-size:14px;
       font-weight:600;
       cursor:pointer;
-    }
-    .dropdown-btn .dot{
-      height:6px;
-      width:6px;
-      border-radius:999px;
-      background:var(--ai);
-    }
-    .dropdown-menu{
-      position:absolute;
-      top:calc(100% + 8px);
-      right:0;
-      min-width:200px;
-      padding:8px;
-      background:#fff;
-      border:1px solid var(--border);
-      border-radius:12px;
-      box-shadow:0 18px 40px rgba(15,23,42,0.12);
-      display:none;
-      z-index:50;
-    }
-    .dropdown-menu.open{ display:block; }
-    .dropdown-menu a,
-    .dropdown-menu button{
-      width:100%;
-      text-align:left;
+      transition:all 0.2s ease;
       display:flex;
       align-items:center;
-      gap:10px;
-      padding:8px 10px;
-      border-radius:10px;
-      border:0;
-      background:transparent;
-      cursor:pointer;
-      color:inherit;
-      text-decoration:none;
-      font-size:14px;
+      gap:6px;
     }
-    .dropdown-menu a:hover,
-    .dropdown-menu button:hover{
-      background:#f3f4f6;
+    .create-btn:hover{
+      background:var(--primary-hover);
+      transform:translateY(-1px);
     }
-    .dropdown-menu .menu-sep{
-      height:1px;
-      background:var(--border);
-      margin:6px 0;
-    }
-    .admin-sidebar{
-      grid-row:2;
-      grid-column:1;
-      background:#0f172a;
-      color:#e2e8f0;
-      padding:16px 10px;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-      position:sticky;
-      top:var(--header-h);
-      height:calc(100vh - var(--header-h));
-    }
-    .sidebar-item{
+    .user-icon-btn{
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      background:var(--active-bg);
+      border:2px solid var(--border);
       display:flex;
       align-items:center;
       justify-content:center;
-      height:48px;
-      border-radius:14px;
-      border:1px solid transparent;
-      background:transparent;
-      color:inherit;
       cursor:pointer;
-      position:relative;
+      transition:all 0.2s ease;
     }
-    .sidebar-item svg{
+    .user-icon-btn:hover{
+      background:var(--border);
+      border-color:var(--primary);
+    }
+    .user-icon-btn svg{
       width:20px;
       height:20px;
+      stroke:var(--text);
     }
-    .sidebar-item img{
-      width:22px;
-      height:22px;
-    }
-    .sidebar-item.active{
-      background:rgba(148,163,184,0.18);
-      border-color:rgba(148,163,184,0.3);
-    }
-    .sidebar-item span{
+    .create-dropdown,
+    .user-dropdown{
       position:absolute;
-      left:64px;
+      top:calc(100% + 8px);
+      right:0;
+      background:#ffffff;
+      border:1px solid var(--border);
+      border-radius:12px;
+      box-shadow:0 8px 24px rgba(0, 0, 0, 0.12);
+      min-width:220px;
       opacity:0;
-      pointer-events:none;
-      white-space:nowrap;
-      background:#111827;
-      color:#fff;
-      padding:6px 10px;
-      border-radius:10px;
-      font-size:12px;
-      transition:opacity .15s ease;
+      visibility:hidden;
+      transform:translateY(-10px);
+      transition:all 0.2s ease;
+      overflow:hidden;
+      z-index:50;
     }
-    .sidebar-item:hover span{ opacity:1; }
+    .user-dropdown{ min-width:200px; }
+    .create-dropdown.active,
+    .user-dropdown.active{
+      opacity:1;
+      visibility:visible;
+      transform:translateY(0);
+    }
+    .dropdown-item{
+      padding:14px 20px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      color:var(--text);
+      text-decoration:none;
+      transition:all 0.15s ease;
+      cursor:pointer;
+      border-bottom:1px solid var(--border);
+      font-size:14px;
+      font-weight:500;
+    }
+    .dropdown-item:last-child{
+      border-bottom:none;
+    }
+    .dropdown-item:hover{
+      background:var(--active-bg);
+    }
+    .dropdown-item svg{
+      width:18px;
+      height:18px;
+      stroke:var(--text-secondary);
+    }
+    .dropdown-item:hover svg{
+      stroke:var(--primary);
+    }
+    .dropdown-currency{
+      font-size:18px;
+      font-weight:600;
+      color:var(--text-secondary);
+      width:18px;
+      height:18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .admin-sidebar{
+      width:var(--sidebar-width);
+      min-width:var(--sidebar-width);
+      background:#ffffff;
+      border-right:1px solid var(--border);
+      padding:20px 0;
+      position:fixed;
+      left:0;
+      top:var(--topbar-height);
+      height:calc(100vh - var(--topbar-height));
+      overflow-y:auto;
+      overflow-x:hidden;
+      z-index:100;
+      scrollbar-width:thin;
+      scrollbar-color:#cbd5e1 transparent;
+    }
+    .admin-sidebar::-webkit-scrollbar{
+      width:6px;
+    }
+    .admin-sidebar::-webkit-scrollbar-thumb{
+      background:#cbd5e1;
+      border-radius:3px;
+    }
+    .sb-nav{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      padding:0 8px;
+    }
+    .sb-item{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:12px 8px;
+      border-radius:12px;
+      text-decoration:none;
+      color:var(--text-secondary);
+      transition:all 0.2s ease;
+      cursor:pointer;
+      position:relative;
+      gap:6px;
+    }
+    .sb-item:hover{
+      background:var(--active-bg);
+      color:var(--text);
+    }
+    .sb-item.active{
+      background:var(--active-bg);
+      color:var(--primary);
+    }
+    .sb-icon{
+      width:32px;
+      height:32px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:24px;
+    }
+    .sb-icon svg{
+      width:28px;
+      height:28px;
+      stroke:currentColor;
+      fill:none;
+      stroke-width:2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+    .sb-icon img{
+      width:28px;
+      height:28px;
+      object-fit:contain;
+    }
+    .sb-label{
+      font-size:11px;
+      font-weight:500;
+      text-align:center;
+      line-height:1.2;
+      max-width:76px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .sb-divider{
+      height:1px;
+      background:var(--border);
+      margin:12px 12px;
+    }
+    .sb-item.ai-badge{
+      background:linear-gradient(135deg, #009fe3 0%, #4facfe 100%);
+      color:#ffffff;
+      margin:8px 8px 0;
+    }
+    .sb-item.ai-badge:hover{
+      background:linear-gradient(135deg, #0080b8 0%, #3b9cef 100%);
+      transform:translateY(-2px);
+    }
+    .sb-item.ai-badge .sb-label{
+      color:#ffffff;
+      font-weight:600;
+    }
+    .sb-currency{
+      font-size:28px;
+      font-weight:600;
+    }
     .admin-main{
-      grid-row:2;
-      grid-column:2;
-      padding:24px;
-      overflow:auto;
+      padding:calc(var(--topbar-height) + 24px) 24px 24px calc(var(--sidebar-width) + 24px);
+      min-height:100vh;
     }
     .page-header{
       display:flex;
@@ -1459,21 +1562,19 @@ router.get(
       transform:translateX(0);
     }
     @media (max-width: 980px){
-      .admin-shell{
-        grid-template-columns:1fr;
-        grid-template-rows:var(--header-h) 1fr;
-      }
-      .admin-sidebar{
-        position:fixed;
-        top:var(--header-h);
-        left:0;
-        bottom:0;
-        height:auto;
-        transform:translateX(-110%);
-        transition:transform .2s ease;
+      .sidebar-toggle{
+        display:grid;
       }
       .admin-main{
-        grid-column:1;
+        padding:calc(var(--topbar-height) + 16px) 16px 16px;
+      }
+      .admin-sidebar{
+        transform:translateX(-100%);
+        transition:transform 0.2s ease;
+        box-shadow:10px 0 30px rgba(15, 23, 42, 0.15);
+      }
+      body.sidebar-open .admin-sidebar{
+        transform:translateX(0);
       }
     }
    /* Fixed header sits above everything */
@@ -3781,42 +3882,85 @@ router.get(
   <div class="admin-shell">
     <header class="admin-topbar">
       <div class="topbar-left">
-        <button class="icon-btn" id="sidebarToggle" type="button" aria-label="Toggle sidebar" aria-expanded="false" aria-controls="adminSidebar">
+        <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Toggle sidebar" aria-expanded="false" aria-controls="adminSidebar">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
         </button>
-        <a class="topbar-brand" href="/admin/ui/home" data-view="/admin/ui/home">
+        <a class="topbar-logo" href="/admin/ui/home" data-view="/admin/ui/home">
           <img src="/admin/ui/brand-logo" alt="TixAll" />
           <span>Admin Console</span>
         </a>
       </div>
       <div class="topbar-actions">
-        <div class="dropdown" id="createMenu">
-          <button class="dropdown-btn" id="createMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false">
-            <span class="dot"></span>
+        <div class="create-menu">
+          <button class="create-btn" id="create-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
             Create
           </button>
-          <div class="dropdown-menu" id="createMenuList" role="menu" aria-label="Create menu">
-            <a href="/admin/ui/shows/create" data-view="/admin/ui/shows/create" role="menuitem">Create Show</a>
-            <a href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai" role="menuitem">Create Show using AI</a>
-            <a href="/admin/ui/product-store/products/new" data-view="/admin/ui/product-store/products/new" role="menuitem">Create Product</a>
+          <div class="create-dropdown" id="create-dropdown" role="menu" aria-label="Create menu">
+            <a href="/admin/ui/shows/create" data-view="/admin/ui/shows/create" class="dropdown-item" role="menuitem">
+              <svg viewBox="0 0 24 24" style="fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              Create Show
+            </a>
+            <a href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai" class="dropdown-item" role="menuitem">
+              <svg viewBox="0 0 24 24" style="fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+              Create Show using AI
+            </a>
+            <a href="/admin/ui/product-store/products/new" data-view="/admin/ui/product-store/products/new" class="dropdown-item" role="menuitem">
+              <svg viewBox="0 0 24 24" style="fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+              Create Product
+            </a>
           </div>
         </div>
-        <div class="dropdown" id="userMenu">
-          <button class="dropdown-btn" id="userMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.51 4.51 0 0 0 12 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M4 20.2c1.7-4.1 5.1-6.2 8-6.2s6.3 2.1 8 6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <div class="user-menu">
+          <button class="user-icon-btn" id="user-icon" type="button" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" style="fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
             </svg>
-            Account
           </button>
-          <div class="dropdown-menu" id="userMenuList" role="menu" aria-label="User menu">
-            <a href="/admin/ui/account" data-view="/admin/ui/account" role="menuitem">Account</a>
-            <a href="/admin/ui/notifications" data-view="/admin/ui/notifications" role="menuitem">Notifications</a>
-            <a href="/admin/ui/finance" data-view="/admin/ui/finance" role="menuitem">Finance</a>
-            <div class="menu-sep"></div>
-            <a href="/admin/ui/logout" role="menuitem">Log out</a>
+          <div class="user-dropdown" id="user-dropdown" role="menu" aria-label="User menu">
+            <a href="/admin/ui/account" data-view="/admin/ui/account" class="dropdown-item" role="menuitem">
+              <svg viewBox="0 0 24 24" style="fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              Account
+            </a>
+            <a href="/admin/ui/notifications" data-view="/admin/ui/notifications" class="dropdown-item" role="menuitem">
+              <svg viewBox="0 0 24 24" style="fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              Notifications
+            </a>
+            <a href="/admin/ui/finance" data-view="/admin/ui/finance" class="dropdown-item" role="menuitem">
+              <span class="dropdown-currency">£</span>
+              Finance
+            </a>
+            <a href="/admin/ui/logout" class="dropdown-item" role="menuitem">
+              <svg viewBox="0 0 24 24" style="fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              Log out
+            </a>
           </div>
         </div>
       </div>
@@ -3961,33 +4105,66 @@ router.get(
   var sidebarEl = $('#adminSidebar');
   var isOwner = ${JSON.stringify(isOwner)};
 
-  function initDropdown(btn, menu){
-    if (!btn || !menu) return { close: function(){} };
-    function close(){
-      menu.classList.remove('open');
-      btn.setAttribute('aria-expanded', 'false');
-    }
-    function open(){
-      menu.classList.add('open');
-      btn.setAttribute('aria-expanded', 'true');
-    }
-    btn.addEventListener('click', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      if (menu.classList.contains('open')) close();
-      else open();
-    });
-    document.addEventListener('click', function(e){
-      if (!menu.contains(e.target) && !btn.contains(e.target)) close();
-    });
-    document.addEventListener('keydown', function(e){
-      if (e.key === 'Escape') close();
-    });
-    return { close: close };
+  var createBtn = $('#create-btn');
+  var createDropdown = $('#create-dropdown');
+  var userIcon = $('#user-icon');
+  var userDropdown = $('#user-dropdown');
+
+  function closeDropdowns(){
+    if (createDropdown) createDropdown.classList.remove('active');
+    if (userDropdown) userDropdown.classList.remove('active');
+    if (createBtn) createBtn.setAttribute('aria-expanded', 'false');
+    if (userIcon) userIcon.setAttribute('aria-expanded', 'false');
   }
 
-  var createMenu = initDropdown($('#createMenuBtn'), $('#createMenuList'));
-  var userMenu = initDropdown($('#userMenuBtn'), $('#userMenuList'));
+  if (createBtn && createDropdown){
+    createBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      createDropdown.classList.toggle('active');
+      createBtn.setAttribute('aria-expanded', createDropdown.classList.contains('active') ? 'true' : 'false');
+      if (userDropdown){
+        userDropdown.classList.remove('active');
+        if (userIcon) userIcon.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  if (userIcon && userDropdown){
+    userIcon.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      userDropdown.classList.toggle('active');
+      userIcon.setAttribute('aria-expanded', userDropdown.classList.contains('active') ? 'true' : 'false');
+      if (createDropdown){
+        createDropdown.classList.remove('active');
+        if (createBtn) createBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    if (createDropdown && createBtn){
+      if (!createDropdown.contains(e.target) && !createBtn.contains(e.target)){
+        createDropdown.classList.remove('active');
+        createBtn.setAttribute('aria-expanded', 'false');
+      }
+    }
+    if (userDropdown && userIcon){
+      if (!userDropdown.contains(e.target) && !userIcon.contains(e.target)){
+        userDropdown.classList.remove('active');
+        userIcon.setAttribute('aria-expanded', 'false');
+      }
+    }
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') closeDropdowns();
+  });
+
+  $$('.dropdown-item').forEach(function(item){
+    item.addEventListener('click', closeDropdowns);
+  });
 
 
   var NAV = {
@@ -4122,7 +4299,165 @@ router.get(
     };
   }
 
-  var NAV_ORDER = Object.keys(NAV);
+  var SIDEBAR_ITEMS = [
+    {
+      key: 'events',
+      label: 'Events',
+      labelHtml: 'Events',
+      icon:
+        '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
+      path: '/admin/ui/events',
+      matchSection: 'events'
+    },
+    {
+      key: 'products',
+      label: 'Products',
+      labelHtml: 'Products',
+      icon:
+        '<svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>',
+      path: '/admin/ui/products',
+      matchSection: 'products'
+    },
+    {
+      key: 'venues',
+      label: 'Venues',
+      labelHtml: 'Venues',
+      icon:
+        '<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>',
+      path: '/admin/ui/venues',
+      matchSection: 'venues'
+    },
+    {
+      key: 'promoters',
+      label: 'Artists & Promoters',
+      labelHtml: 'Artists &amp;<br />Promoters',
+      icon:
+        '<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>',
+      path: '/admin/ui/promoters',
+      matchSection: 'promoters'
+    },
+    {
+      key: 'customers',
+      label: 'Customers & Marketing',
+      labelHtml: 'Customers &amp;<br />Marketing',
+      icon:
+        '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+      path: '/admin/ui/customers',
+      matchSection: 'customers'
+    },
+    {
+      key: 'store',
+      label: 'My Store',
+      labelHtml: 'My Store',
+      icon:
+        '<svg viewBox="0 0 24 24"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"></path><path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"></path><line x1="12" y1="3" x2="12" y2="9"></line></svg>',
+      path: '/admin/ui/store/overview',
+      matchSection: 'store'
+    },
+    {
+      key: 'account',
+      label: 'Account',
+      labelHtml: 'Account',
+      icon:
+        '<svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
+      path: '/admin/ui/account',
+      matchSection: 'account'
+    },
+    {
+      key: 'finance',
+      label: 'Finance',
+      labelHtml: 'Finance',
+      icon: '<span class="sb-currency">£</span>',
+      path: '/admin/ui/finance',
+      matchSection: 'account',
+      matchTabs: ['finance']
+    },
+    {
+      key: 'ai',
+      label: 'TixAll AI',
+      labelHtml: 'TixAll<br />AI',
+      icon:
+        '<svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>',
+      path: '/admin/ui/ai/overview',
+      matchSection: 'ai',
+      className: 'ai-badge'
+    }
+  ];
+
+  if (isOwner){
+    SIDEBAR_ITEMS.push({ type: 'divider' });
+    SIDEBAR_ITEMS.push(
+      {
+        key: 'owner-console',
+        label: 'Owner Console',
+        labelHtml: 'Owner<br />Console',
+        icon:
+          '<svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>',
+        path: '/admin/ui/owner',
+        matchSection: 'owner',
+        matchTabs: ['overview']
+      },
+      {
+        key: 'owner-insights',
+        label: 'Insights',
+        labelHtml: 'Insights',
+        icon:
+          '<svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>',
+        path: '/admin/ui/owner/insights',
+        matchSection: 'owner',
+        matchTabs: ['insights']
+      },
+      {
+        key: 'owner-organisers',
+        label: 'Organisers',
+        labelHtml: 'Organisers',
+        icon:
+          '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+        path: '/admin/ui/owner/organisers',
+        matchSection: 'owner',
+        matchTabs: ['organisers']
+      },
+      {
+        key: 'owner-financial',
+        label: 'Financial',
+        labelHtml: 'Financial',
+        icon: '<span class="sb-currency">£</span>',
+        path: '/admin/ui/owner/financial',
+        matchSection: 'owner',
+        matchTabs: ['financial']
+      },
+      {
+        key: 'owner-health',
+        label: 'Health',
+        labelHtml: 'Health',
+        icon:
+          '<svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>',
+        path: '/admin/ui/owner/health',
+        matchSection: 'owner',
+        matchTabs: ['health']
+      },
+      {
+        key: 'owner-audit',
+        label: 'Audit Log',
+        labelHtml: 'Audit Log',
+        icon:
+          '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>',
+        path: '/admin/ui/owner/audit',
+        matchSection: 'owner',
+        matchTabs: ['audit']
+      }
+    );
+  }
+
+  SIDEBAR_ITEMS.push({ type: 'divider' });
+  SIDEBAR_ITEMS.push({
+    key: 'logout',
+    label: 'Log out',
+    labelHtml: 'Log out',
+    icon:
+      '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>',
+    path: '/admin/ui/logout'
+  });
 
   function normalizePath(path){
     if (path === '/admin/ui' || path === '/admin/ui/index.html') return '/admin/ui/home';
@@ -4185,15 +4520,17 @@ router.get(
 
   function renderSidebar(){
     if (!sidebarEl) return;
-    sidebarEl.innerHTML = NAV_ORDER.map(function(key){
-      var section = NAV[key];
-      if (!section) return '';
+    var markup = SIDEBAR_ITEMS.map(function(item){
+      if (item.type === 'divider') return '<div class="sb-divider"></div>';
+      var classes = 'sb-item' + (item.className ? ' ' + item.className : '');
+      var label = item.labelHtml || escapeHtml(item.label || '');
       return ''
-        + '<button class="sidebar-item" type="button" data-section="' + key + '" aria-label="' + escapeHtml(section.title) + '">'
-        +   section.icon
-        +   '<span>' + escapeHtml(section.title) + '</span>'
-        + '</button>';
+        + '<a class="' + classes + '" href="' + item.path + '" data-view="' + item.path + '" data-section="' + (item.matchSection || '') + '" data-tabs="' + (item.matchTabs ? item.matchTabs.join(',') : '') + '" aria-label="' + escapeHtml(item.label || '') + '">'
+        +   '<div class="sb-icon">' + item.icon + '</div>'
+        +   '<div class="sb-label">' + label + '</div>'
+        + '</a>';
     }).join('');
+    sidebarEl.innerHTML = '<nav class="sb-nav">' + markup + '</nav>';
   }
 
   function renderTabs(state){
@@ -4216,24 +4553,31 @@ router.get(
   function setActive(path){
     var state = findNavState(path);
     renderTabs(state);
-    $$('.sidebar-item').forEach(function(item){
-      item.classList.toggle('active', item.getAttribute('data-section') === state.sectionKey);
+    var sidebarItems = $$('.sb-item', sidebarEl);
+    sidebarItems.forEach(function(item){
+      item.classList.remove('active');
     });
+    var tabMatch = sidebarItems.find(function(item){
+      var section = item.getAttribute('data-section');
+      if (!section || section !== state.sectionKey) return false;
+      var tabs = (item.getAttribute('data-tabs') || '').split(',').filter(Boolean);
+      if (!tabs.length) return false;
+      return tabs.indexOf(state.tabKey) !== -1;
+    });
+    if (tabMatch){
+      tabMatch.classList.add('active');
+    } else {
+      sidebarItems.forEach(function(item){
+        var section = item.getAttribute('data-section');
+        if (section && section === state.sectionKey){
+          item.classList.add('active');
+        }
+      });
+    }
     return state;
   }
 
   renderSidebar();
-
-  if (sidebarEl){
-    sidebarEl.addEventListener('click', function(e){
-      var btn = e.target.closest('.sidebar-item');
-      if (!btn) return;
-      var key = btn.getAttribute('data-section');
-      var section = NAV[key];
-      if (!section || !section.tabs.length) return;
-      go(section.tabs[0].path);
-    });
-  }
 
   async function j(url, opts){
     const res = await fetch(url, { credentials:'include', ...(opts || {}) });
@@ -5038,8 +5382,7 @@ document.addEventListener('click', function(e){
     if (view){
       if (link.tagName === 'A') e.preventDefault();
       go(view);
-      if (createMenu) createMenu.close();
-      if (userMenu) userMenu.close();
+      closeDropdowns();
     }
   }
 });
