@@ -155,3 +155,36 @@
       });
     });
   productStoreCreatePage();
+    function setHeaderForPage(page){
+      var mainTitle = document.getElementById('main-title');
+      var subtitle = document.getElementById('subtitle');
+      if (!mainTitle || !subtitle) return;
+
+      if (page === 'create') {
+        mainTitle.textContent = 'Create products that people love';
+        subtitle.textContent = 'Design and configure your products with custom pricing, images, and descriptions';
+      } else if (page === 'store') {
+        mainTitle.textContent = 'Your store, your rules, your vibe';
+        subtitle.textContent = 'Manage your product catalog, organize collections, and control your storefront visibility';
+      } else if (page === 'orders') {
+        mainTitle.textContent = 'Orders flying in? We got you';
+        subtitle.textContent = 'Track all customer orders, manage fulfillment status, and process refunds in one place';
+      } else if (page === 'settings') {
+        mainTitle.textContent = 'Tweak it till it feels just right';
+        subtitle.textContent = 'Configure store preferences, payment methods, shipping options, and notification settings';
+      } else if (page === 'upsells') {
+        mainTitle.textContent = 'More money, less effort. Nice';
+        subtitle.textContent = 'Create automated product recommendations and bundle offers to increase average order value';
+      } else {
+        mainTitle.textContent = defaultConfig.main_title;
+        subtitle.textContent = defaultConfig.subtitle;
+      }
+    }
+
+          setHeaderForPage(page);
+
+    var defaultTab = document.querySelector('.nav-tab[data-page="create"]');
+    if (defaultTab){
+      setActiveTab(defaultTab, 'create');
+      setHeaderForPage('create');
+    }
