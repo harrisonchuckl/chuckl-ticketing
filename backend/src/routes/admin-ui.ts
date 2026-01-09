@@ -15814,6 +15814,7 @@ function renderInterests(customer){
       +         '<label class="ps-form-field">'
       +           '<span class="ps-form-label">Title</span>'
       +           '<input id="ps_prod_title" class="ps-input" placeholder="Enter product title" />'
+      +           '<div class="ps-upload-note" id="ps_prod_title_error"></div>'
       +         '</label>'
       +         '<label class="ps-form-field">'
       +           '<span class="ps-form-label">Description</span>'
@@ -15883,7 +15884,7 @@ function renderInterests(customer){
       +         '</label>'
       +         '<label class="ps-form-field">'
       +           '<span class="ps-form-label">Preorder Close Date</span>'
-      +           '<input id="ps_prod_preorder_close" class="ps-input" placeholder="2024-12-31" />'
+      +           '<input id="ps_prod_preorder_close" class="ps-input" placeholder="2024-12-31" type="date" />'
       +         '</label>'
       +       '</div>'
       +       '<div class="ps-section-card">'
@@ -16106,6 +16107,11 @@ function renderInterests(customer){
       if (msg) msg.textContent = message || '';
     }
 
+    function setTitleError(message){
+      var msg = $('#ps_prod_title_error');
+      if (msg) msg.textContent = message || '';
+    }
+
     async function handleImageFiles(fileList){
       var files = Array.prototype.slice.call(fileList || []).filter(function(file){
         return file && String(file.type || '').startsWith('image/');
@@ -16154,6 +16160,14 @@ function renderInterests(customer){
 
     var imageZone = $('#ps_add_image');
     var imageInput = $('#ps_image_input');
+    var titleInput = $('#ps_prod_title');
+    if (titleInput){
+      titleInput.addEventListener('input', function(){
+        if (String(titleInput.value || '').trim()){
+          setTitleError('');
+        }
+      });
+    }
     if (imageZone && imageInput){
       imageZone.addEventListener('click', function(){
         imageInput.click();
@@ -16231,9 +16245,19 @@ function renderInterests(customer){
     $('#ps_prod_save').addEventListener('click', async function(){
       $('#ps_prod_msg').textContent = '';
       try{
+        var titleValue = ($('#ps_prod_title').value || '').trim();
+        if (!titleValue){
+          setTitleError('Please enter a product title before saving.');
+          $('#ps_prod_title').focus();
+          return;
+        }
+        setTitleError('');
+        var preorderEnabled = $('#ps_prod_preorder').checked;
+        var preorderCloseRaw = ($('#ps_prod_preorder_close').value || '').trim();
+        var preorderCloseAt = (preorderEnabled && preorderCloseRaw) ? preorderCloseRaw : null;
         var payload = {
-          title: ($('#ps_prod_title').value || '').trim(),
-          slug: slugifyLocal($('#ps_prod_title').value),
+          title: titleValue,
+          slug: slugifyLocal(titleValue),
           description: ($('#ps_prod_desc').value || '').trim(),
           category: $('#ps_prod_category').value,
           fulfilmentType: $('#ps_prod_fulfilment').value,
@@ -16243,8 +16267,8 @@ function renderInterests(customer){
           inventoryMode: $('#ps_prod_inventory').value,
           stockCount: $('#ps_prod_stock').value,
           lowStockThreshold: $('#ps_prod_low_stock').value,
-          preorderEnabled: $('#ps_prod_preorder').checked,
-          preorderCloseAt: $('#ps_prod_preorder_close').value,
+          preorderEnabled: preorderEnabled,
+          preorderCloseAt: preorderCloseAt,
           maxPerOrder: $('#ps_prod_max_order').value,
           maxPerTicket: $('#ps_prod_max_ticket').value,
           variants: collectVariants(),
@@ -16252,11 +16276,32 @@ function renderInterests(customer){
         };
         var url = '/admin/api/product-store/products' + (productId ? '/' + productId : '');
         var method = productId ? 'PUT' : 'POST';
-        var data = await j(url, {
+        var res = await fetch(url, {
           method: method,
           headers: { 'Content-Type':'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          credentials: 'include'
         });
+        var text = '';
+        try{ text = await res.text(); }catch(e){}
+        var data = {};
+        if (text){
+          try{
+            data = JSON.parse(text);
+          }catch(e){
+            data = { error: text };
+          }
+        }
+        if (!res.ok || (data && data.ok === false)){
+          console.log('product save failed', data);
+          var errMessage = (data && data.error) ? data.error : ('HTTP ' + res.status);
+          var errCode = data && data.code ? (' (' + data.code + ')') : '';
+          if (data && data.code === 'SLUG_TAKEN'){
+            errMessage = 'A product with this slug already exists. Please edit the slug and try again.';
+          }
+          $('#ps_prod_msg').textContent = errMessage + errCode;
+          return;
+        }
         if (data && data.ok){
           $('#ps_prod_msg').textContent = 'Saved';
           if (!productId && data.product && data.product.id){

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Router } from "express";
 import {
   InventoryMode,
@@ -56,6 +57,10 @@ function parseIntOrNull(value: any) {
 function normalizeEnumValue<T extends string>(value: any, allowed: Set<string>, fallback: T): T {
   const normalized = String(value || "").trim().toUpperCase();
   return (allowed.has(normalized) ? normalized : fallback) as T;
+}
+
+function createErrorId() {
+  return randomUUID().split("-")[0];
 }
 
 router.get("/product-store/storefront", requireAdminOrOrganiser, async (req, res) => {
@@ -303,22 +308,69 @@ router.get("/product-store/products/:id", requireAdminOrOrganiser, async (req, r
 
 router.post("/product-store/products", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { storefront, ownerUserId } = await loadStorefrontForRequest(req);
+    const logContext = {
+      userId: req.user?.id || null,
+      role: req.user?.role || null,
+      path: req.path,
+    };
+    let storefrontResult;
+    try {
+      storefrontResult = await loadStorefrontForRequest(req);
+    } catch (err: any) {
+      if (String(err?.message || "").includes("Missing owner user id")) {
+        console.error("[product-store] create product missing owner", logContext);
+        return res.status(400).json({
+          ok: false,
+          error: "Storefront owner could not be determined",
+          code: "MISSING_OWNER",
+        });
+      }
+      throw err;
+    }
+
+    const { storefront, ownerUserId } = storefrontResult;
     const activeStorefront = storefront ?? (await ensureStorefrontForUser(ownerUserId));
     if (!activeStorefront) {
-      return res.status(404).json({ ok: false, error: "Storefront not found" });
+      console.error("[product-store] create product missing owner", logContext);
+      return res.status(400).json({
+        ok: false,
+        error: "Storefront owner could not be determined",
+        code: "MISSING_OWNER",
+      });
     }
 
     const payload = req.body || {};
     const title = String(payload.title || "").trim();
-    if (!title) return res.status(400).json({ ok: false, error: "Title is required" });
+    if (!title) {
+      return res.status(400).json({ ok: false, error: "Title is required", code: "MISSING_TITLE" });
+    }
 
     const slugValue = slugify(String(payload.slug || title));
 
     const existing = await prisma.product.findFirst({
       where: { storefrontId: activeStorefront.id, slug: slugValue },
     });
-    if (existing) return res.status(409).json({ ok: false, error: "Product slug already exists" });
+    if (existing) {
+      return res.status(409).json({
+        ok: false,
+        error: "A product with this slug already exists. Please edit the slug and try again.",
+        code: "SLUG_TAKEN",
+      });
+    }
+
+    const preorderEnabled = Boolean(payload.preorderEnabled);
+    let preorderCloseAt: Date | null = null;
+    if (preorderEnabled && payload.preorderCloseAt) {
+      const parsedDate = new Date(payload.preorderCloseAt);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(422).json({
+          ok: false,
+          error: "Invalid preorder close date",
+          code: "INVALID_PREORDER_DATE",
+        });
+      }
+      preorderCloseAt = parsedDate;
+    }
 
     const product = await prisma.product.create({
       data: {
@@ -335,15 +387,22 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
         inventoryMode: normalizeEnumValue(payload.inventoryMode, inventoryModeValues, "UNLIMITED"),
         stockCount: parseIntOrNull(payload.stockCount),
         lowStockThreshold: parseIntOrNull(payload.lowStockThreshold),
-        preorderEnabled: Boolean(payload.preorderEnabled),
-        preorderCloseAt: payload.preorderCloseAt ? new Date(payload.preorderCloseAt) : null,
+        preorderEnabled,
+        preorderCloseAt,
         maxPerOrder: parseIntOrNull(payload.maxPerOrder),
         maxPerTicket: parseIntOrNull(payload.maxPerTicket),
       },
     });
 
     const variants = Array.isArray(payload.variants) ? payload.variants : [];
-    const images = Array.isArray(payload.images) ? payload.images : [];
+    const rawImages = Array.isArray(payload.images) ? payload.images : [];
+    // Drop image entries without a valid URL to avoid failing the whole request.
+    const images = rawImages
+      .map((img: any, index: number) => ({
+        url: String(img?.url || "").trim(),
+        sortOrder: Number(img?.sortOrder ?? index),
+      }))
+      .filter((img) => img.url);
 
     if (variants.length) {
       await prisma.productVariant.createMany({
@@ -360,10 +419,10 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
 
     if (images.length) {
       await prisma.productImage.createMany({
-        data: images.map((img: any, index: number) => ({
+        data: images.map((img: any) => ({
           productId: product.id,
-          url: String(img.url || "").trim(),
-          sortOrder: Number(img.sortOrder ?? index),
+          url: img.url,
+          sortOrder: Number(img.sortOrder),
         })),
       });
     }
@@ -375,8 +434,41 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
 
     return res.json({ ok: true, product: fullProduct });
   } catch (err: any) {
-    console.error("[product-store] create product failed", err);
-    return res.status(500).json({ ok: false, error: "Failed to create product" });
+    const showDetails = process.env.NODE_ENV !== "production";
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error("[product-store] create product failed", err);
+      if (err.code === "P2002") {
+        return res.status(409).json({
+          ok: false,
+          error: "A product with this slug already exists. Please edit the slug and try again.",
+          code: "SLUG_TAKEN",
+          details: showDetails ? err.message : undefined,
+        });
+      }
+      return res.status(422).json({
+        ok: false,
+        error: "Invalid product data",
+        code: "PRISMA_VALIDATION",
+        details: showDetails ? err.message : undefined,
+      });
+    }
+    if (err instanceof Prisma.PrismaClientValidationError) {
+      console.error("[product-store] create product failed", err);
+      return res.status(422).json({
+        ok: false,
+        error: "Invalid product data",
+        code: "PRISMA_VALIDATION",
+        details: showDetails ? err.message : undefined,
+      });
+    }
+    const errorId = createErrorId();
+    console.error("[product-store] create product failed", { errorId, err });
+    return res.status(500).json({
+      ok: false,
+      error: "Failed to create product",
+      code: "INTERNAL_ERROR",
+      errorId,
+    });
   }
 });
 
