@@ -402,7 +402,7 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
         url: String(img?.url || "").trim(),
         sortOrder: Number(img?.sortOrder ?? index),
       }))
-      .filter((img) => img.url);
+      .filter((img: { url: string }) => img.url);
 
     if (variants.length) {
       await prisma.productVariant.createMany({
