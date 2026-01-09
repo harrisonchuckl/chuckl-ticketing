@@ -15883,7 +15883,7 @@ function renderInterests(customer){
       +         '</label>'
       +         '<label class="ps-form-field">'
       +           '<span class="ps-form-label">Preorder Close Date</span>'
-      +           '<input id="ps_prod_preorder_close" class="ps-input" placeholder="2024-12-31" />'
+      +           '<input id="ps_prod_preorder_close" class="ps-input" placeholder="2024-12-31" type="date" />'
       +         '</label>'
       +       '</div>'
       +       '<div class="ps-section-card">'

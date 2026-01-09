@@ -53,6 +53,12 @@ function parseIntOrNull(value: any) {
   return Number.isFinite(parsed) ? Math.round(parsed) : null;
 }
 
+function parseOptionalDate(value: any) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "invalid" : parsed;
+}
+
 function normalizeEnumValue<T extends string>(value: any, allowed: Set<string>, fallback: T): T {
   const normalized = String(value || "").trim().toUpperCase();
   return (allowed.has(normalized) ? normalized : fallback) as T;
@@ -320,6 +326,11 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
     });
     if (existing) return res.status(409).json({ ok: false, error: "Product slug already exists" });
 
+    const preorderCloseAt = parseOptionalDate(payload.preorderCloseAt);
+    if (preorderCloseAt === "invalid") {
+      return res.status(400).json({ ok: false, error: "Preorder close date must be valid" });
+    }
+
     const product = await prisma.product.create({
       data: {
         storefrontId: activeStorefront.id,
@@ -336,7 +347,7 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
         stockCount: parseIntOrNull(payload.stockCount),
         lowStockThreshold: parseIntOrNull(payload.lowStockThreshold),
         preorderEnabled: Boolean(payload.preorderEnabled),
-        preorderCloseAt: payload.preorderCloseAt ? new Date(payload.preorderCloseAt) : null,
+        preorderCloseAt,
         maxPerOrder: parseIntOrNull(payload.maxPerOrder),
         maxPerTicket: parseIntOrNull(payload.maxPerTicket),
       },
@@ -397,6 +408,11 @@ router.put("/product-store/products/:id", requireAdminOrOrganiser, async (req, r
     });
     if (existing) return res.status(409).json({ ok: false, error: "Product slug already exists" });
 
+    const preorderCloseAt = parseOptionalDate(payload.preorderCloseAt);
+    if (preorderCloseAt === "invalid") {
+      return res.status(400).json({ ok: false, error: "Preorder close date must be valid" });
+    }
+
     await prisma.product.update({
       where: { id: productId },
       data: {
@@ -413,7 +429,7 @@ router.put("/product-store/products/:id", requireAdminOrOrganiser, async (req, r
         stockCount: parseIntOrNull(payload.stockCount),
         lowStockThreshold: parseIntOrNull(payload.lowStockThreshold),
         preorderEnabled: Boolean(payload.preorderEnabled),
-        preorderCloseAt: payload.preorderCloseAt ? new Date(payload.preorderCloseAt) : null,
+        preorderCloseAt,
         maxPerOrder: parseIntOrNull(payload.maxPerOrder),
         maxPerTicket: parseIntOrNull(payload.maxPerTicket),
       },
