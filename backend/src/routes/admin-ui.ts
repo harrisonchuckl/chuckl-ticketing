@@ -3800,7 +3800,7 @@ router.get(
           <div class="dropdown-menu" id="createMenuList" role="menu" aria-label="Create menu">
             <a href="/admin/ui/shows/create" data-view="/admin/ui/shows/create" role="menuitem">Create Show</a>
             <a href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai" role="menuitem">Create Show using AI</a>
-            <a href="/admin/ui/product-store/create" data-view="/admin/ui/product-store/create" role="menuitem">Create Product</a>
+            <a href="/admin/ui/product-store/products/new" data-view="/admin/ui/product-store/products/new" role="menuitem">Create Product</a>
           </div>
         </div>
         <div class="dropdown" id="userMenu">
@@ -4006,9 +4006,10 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 8v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       tabs: [
-        { key: 'dashboard', label: 'Dashboard', path: '/admin/ui/dashboard', mount: eventsDashboard },
-        { key: 'create', label: 'Create Show', path: '/admin/ui/shows/create', mount: createShow },
-        { key: 'all', label: 'All Events', path: '/admin/ui/shows/current', mount: listShows }
+        { key: 'overview', label: 'Overview', path: '/admin/ui/events', mount: eventsOverview },
+        { key: 'crave-show', label: 'Crave Show', path: '/admin/ui/shows/create', mount: createShow },
+        { key: 'all', label: 'All Events', path: '/admin/ui/shows/current', mount: listShows },
+        { key: 'dashboard', label: 'Dashboard', path: '/admin/ui/dashboard', mount: eventsDashboard }
       ]
     },
     products: {
@@ -4017,7 +4018,8 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 7h12l1.2 4.5a2 2 0 0 1-1.94 2.5H6.74a2 2 0 0 1-1.94-2.5L6 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6 7l-1-3h14l-1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 21h8a2 2 0 0 0 2-2v-5H6v5a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
       tabs: [
-        { key: 'create', label: 'Create Product', path: '/admin/ui/product-store/create', mount: productStoreCreatePage },
+        { key: 'overview', label: 'Overview', path: '/admin/ui/products', mount: productsOverview },
+        { key: 'crave-product', label: 'Crave Product', path: '/admin/ui/product-store/products/new', mount: productStoreProductForm },
         { key: 'store', label: 'Product Store', path: '/admin/ui/product-store', mount: productStorePage },
         { key: 'orders', label: 'Orders', path: '/admin/ui/product-store/orders', mount: productStoreOrdersPage },
         { key: 'settings', label: 'Settings', path: '/admin/ui/product-store/settings', mount: productStoreSettingsPage },
@@ -4140,6 +4142,9 @@ router.get(
       if (normalized.startsWith('/admin/ui/shows/')) {
         sectionKey = 'events';
         tabKey = 'all';
+      } else if (normalized === '/admin/ui/product-store/create') {
+        sectionKey = 'products';
+        tabKey = 'crave-product';
       } else if (normalized.startsWith('/admin/ui/promoters/')) {
         sectionKey = 'promoters';
         tabKey = 'list';
@@ -21927,6 +21932,41 @@ function renderInterests(customer){
     loadTemplate();
     setPreviewMode('desktop');
   }
+  function eventsOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Events overview</div>'
+          +'<div class="muted">Jump into your shows, dashboard, or create a new event.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Crave Show</a>'
+        +'<a class="btn secondary" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>'
+        +'<a class="btn secondary" href="/admin/ui/dashboard" data-view="/admin/ui/dashboard">Dashboard</a>'
+      +'</div>'
+    +'</div>';
+}
+
+  function productsOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Products overview</div>'
+          +'<div class="muted">Create new Crave products or manage the product store.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/product-store/products/new" data-view="/admin/ui/product-store/products/new">Crave Product</a>'
+        +'<a class="btn secondary" href="/admin/ui/product-store" data-view="/admin/ui/product-store">Product Store</a>'
+      +'</div>'
+    +'</div>';
+}
+
   function notifications(){
   if (!main) return;
   main.innerHTML =
@@ -23365,6 +23405,8 @@ function renderInterests(customer){
       setActive(path);
 
       if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
+      if (path === '/admin/ui/events') return eventsOverview();
+      if (path === '/admin/ui/products') return productsOverview();
       if (path === '/admin/ui/dashboard') return eventsDashboard();
       if (path === '/admin/ui/shows/create-ai') return createShowAI();
       if (path === '/admin/ui/ai/smart-storefront') return smartStorefront();
@@ -23401,8 +23443,8 @@ function renderInterests(customer){
       if (path === '/admin/ui/integrations/printful') return printfulIntegrationPage();
       if (path === '/admin/ui/integrations/printful-pricing') return printfulPricingPage();
       if (path === '/admin/ui/integrations/printful-reconciliation') return printfulReconciliationPage();
-      if (path === '/admin/ui/product-store/create') return productStoreCreatePage();
       if (path === '/admin/ui/product-store')  return productStorePage();
+      if (path === '/admin/ui/product-store/create') return productStoreCreatePage();
       if (path === '/admin/ui/product-store/settings') return productStoreSettingsPage();
       if (path === '/admin/ui/product-store/upsells') return productStoreUpsellsPage();
       if (path === '/admin/ui/product-store/orders') return productStoreOrdersPage();
