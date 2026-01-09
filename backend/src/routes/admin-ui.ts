@@ -1521,6 +1521,9 @@ router.get(
       gap:16px;
       margin-bottom:16px;
     }
+    .page-header.is-hidden{
+      display:none;
+    }
     .page-title{
       font-size:24px;
       font-weight:700;
@@ -3889,7 +3892,6 @@ router.get(
         </button>
         <a class="topbar-logo" href="/admin/ui/home" data-view="/admin/ui/home">
           <img src="/admin/ui/brand-logo" alt="TixAll" />
-          <span>Admin Console</span>
         </a>
       </div>
       <div class="topbar-actions">
@@ -3967,7 +3969,7 @@ router.get(
     </header>
     <aside class="admin-sidebar" id="adminSidebar" aria-label="Primary navigation"></aside>
     <main class="admin-main">
-      <section class="page-header">
+      <section class="page-header" id="pageHeader">
         <div>
           <h1 class="page-title" id="pageTitle">Loading…</h1>
           <div class="page-subtitle" id="pageSubtitle"></div>
@@ -4102,6 +4104,7 @@ router.get(
   var pageTitle = $('#pageTitle');
   var pageSubtitle = $('#pageSubtitle');
   var pageTabs = $('#pageTabs');
+  var pageHeader = $('#pageHeader');
   var sidebarEl = $('#adminSidebar');
   var isOwner = ${JSON.stringify(isOwner)};
 
@@ -4170,7 +4173,7 @@ router.get(
   var NAV = {
     overview: {
       title: 'Overview',
-      subtitle: 'Quick links into the admin console',
+      subtitle: '',
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12l8-7 8 7v7a2 2 0 0 1-2 2h-4v-6H10v6H6a2 2 0 0 1-2-2v-7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
       tabs: [
@@ -4540,8 +4543,10 @@ router.get(
       pageTitle.textContent = 'Admin';
       if (pageSubtitle) pageSubtitle.textContent = '';
       pageTabs.innerHTML = '';
+      if (pageHeader) pageHeader.classList.remove('is-hidden');
       return;
     }
+    if (pageHeader) pageHeader.classList.toggle('is-hidden', state.sectionKey === 'overview');
     pageTitle.textContent = section.title;
     if (pageSubtitle) pageSubtitle.textContent = section.subtitle || '';
     pageTabs.innerHTML = section.tabs.map(function(tab){
