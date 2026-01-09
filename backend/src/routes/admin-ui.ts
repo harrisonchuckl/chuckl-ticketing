@@ -4843,7 +4843,7 @@ document.addEventListener('click', function(e){
       +      '</div>'
       +      '<div class="feature-badge">Works Without Events</div>'
       +      '<h3 class="feature-title">Products &amp; Merch</h3>'
-      +      '<p class="feature-description">Create products on TixAll even if you don\'t run events.</p>'
+      +      '<p class="feature-description">Create products on TixAll even if you do not run events.</p>'
       +      '<ul class="feature-list">'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Sell merch, memberships, add-ons, bundles and extras</span></li>'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Link products to shows (pre-orders, VIP, upsells)</span></li>'
