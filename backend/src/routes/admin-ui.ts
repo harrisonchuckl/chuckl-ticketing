@@ -22698,8 +22698,8 @@ if (!main) return;
 
       if (withLoading){
 
-       startTransition();
-        }, 1500);
+       setTimeout(startTransition, 1500);
+       
       } else {
         startTransition();
       }
