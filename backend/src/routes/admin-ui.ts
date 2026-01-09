@@ -4035,6 +4035,7 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 20V9a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v11" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 12h2M13 12h2M9 15h2M13 15h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       tabs: [
+        { key: 'overview', label: 'Overview', path: '/admin/ui/venues/overview', mount: venuesOverview },
         { key: 'venues', label: 'Venues', path: '/admin/ui/venues', mount: venues }
       ]
     },
@@ -4044,6 +4045,7 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.5 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 8.5 11Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 10a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 20c.8-3 3.5-5 6.5-5s5.7 2 6.5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 19.5c.3-1.8 1.6-3.4 3.5-4.1 1.9-.6 4 .1 5.1 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       tabs: [
+        { key: 'overview', label: 'Overview', path: '/admin/ui/promoters/overview', mount: promotersOverview },
         { key: 'list', label: 'Promoters', path: '/admin/ui/promoters', mount: promotersList },
         { key: 'new', label: 'New Promoter', path: '/admin/ui/promoters/new', mount: promoterCreate }
       ]
@@ -4054,6 +4056,7 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12v4a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3 12l8-4 10 5-10 5-5-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 7.5 17 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       tabs: [
+        { key: 'overview', label: 'Overview', path: '/admin/ui/customers/overview', mount: customersOverview },
         { key: 'customers', label: 'Customers', path: '/admin/ui/customers', mount: customers },
         { key: 'marketing', label: 'Marketing', path: '/admin/ui/marketing', mount: marketingPage },
         { key: 'imports', label: 'Imports & Exports', path: '/admin/ui/imports-exports', mount: importsExports },
@@ -4068,6 +4071,7 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16l-1.5 6H5.5L4 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 7l1-3h8l1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       tabs: [
+        { key: 'overview', label: 'Overview', path: '/admin/ui/store/overview', mount: storeOverview },
         { key: 'storefront', label: 'Storefront', path: '/admin/ui/storefront', mount: storefrontPage },
         { key: 'orders', label: 'Orders', path: '/admin/ui/orders', mount: orders }
       ]
@@ -4078,6 +4082,7 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.51 4.51 0 0 0 12 12Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20.2c1.7-4.1 5.1-6.2 8-6.2s6.3 2.1 8 6.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
       tabs: [
+        { key: 'overview', label: 'Overview', path: '/admin/ui/account/overview', mount: accountOverview },
         { key: 'account', label: 'Account', path: '/admin/ui/account', mount: account },
         { key: 'notifications', label: 'Notifications', path: '/admin/ui/notifications', mount: notifications },
         { key: 'finance', label: 'Finance', path: '/admin/ui/finance', mount: finance }
@@ -4088,6 +4093,7 @@ router.get(
       subtitle: 'Automation and insights powered by AI',
       icon: '<img src="/tixai.png" alt="TixAll AI" style="width:22px;height:22px;" />',
       tabs: [
+        { key: 'overview', label: 'Overview', path: '/admin/ui/ai/overview', mount: aiOverview },
         { key: 'create-ai', label: 'Create Show', path: '/admin/ui/shows/create-ai', mount: createShowAI },
         { key: 'featured', label: 'Featured & Discovery', path: '/admin/ui/ai/featured', mount: aiFeaturedPage },
         { key: 'insights', label: 'AI Insights', path: '/admin/ui/ai/insights', mount: aiInsightsPage },
@@ -21967,6 +21973,117 @@ function renderInterests(customer){
     +'</div>';
 }
 
+  function venuesOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Venues overview</div>'
+          +'<div class="muted">Manage venues and seating details.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>'
+      +'</div>'
+    +'</div>';
+}
+
+  function promotersOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Promoters overview</div>'
+          +'<div class="muted">Find promoters or add a new contact.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Promoters</a>'
+        +'<a class="btn secondary" href="/admin/ui/promoters/new" data-view="/admin/ui/promoters/new">New Promoter</a>'
+      +'</div>'
+    +'</div>';
+}
+
+  function customersOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Customers & Marketing overview</div>'
+          +'<div class="muted">Access audience, campaigns, and insights.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>'
+        +'<a class="btn secondary" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing</a>'
+        +'<a class="btn secondary" href="/admin/ui/imports-exports" data-view="/admin/ui/imports-exports">Imports & Exports</a>'
+        +'<a class="btn secondary" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>'
+        +'<a class="btn secondary" href="/admin/ui/email-templates" data-view="/admin/ui/email-templates">Email Templates</a>'
+        +'<a class="btn secondary" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>'
+      +'</div>'
+    +'</div>';
+}
+
+  function storeOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Store overview</div>'
+          +'<div class="muted">Jump to storefront settings or orders.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/storefront" data-view="/admin/ui/storefront">Storefront</a>'
+        +'<a class="btn secondary" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>'
+      +'</div>'
+    +'</div>';
+}
+
+  function accountOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Account overview</div>'
+          +'<div class="muted">Profile, notifications, and billing.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>'
+        +'<a class="btn secondary" href="/admin/ui/notifications" data-view="/admin/ui/notifications">Notifications</a>'
+        +'<a class="btn secondary" href="/admin/ui/finance" data-view="/admin/ui/finance">Finance</a>'
+      +'</div>'
+    +'</div>';
+}
+
+  function aiOverview(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">TixAll AI overview</div>'
+          +'<div class="muted">Start with AI creation or jump to insights.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
+        +'<a class="btn" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">Create Show</a>'
+        +'<a class="btn secondary" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Featured & Discovery</a>'
+        +'<a class="btn secondary" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">AI Insights</a>'
+        +'<a class="btn secondary" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Marketing Studio</a>'
+        +'<a class="btn secondary" href="/admin/ui/ai/audience" data-view="/admin/ui/ai/audience">Audience & CRM</a>'
+        +'<a class="btn secondary" href="/admin/ui/ai/store" data-view="/admin/ui/ai/store">Store & Add-ons</a>'
+        +'<a class="btn secondary" href="/admin/ui/ai/support" data-view="/admin/ui/ai/support">Support Inbox</a>'
+      +'</div>'
+    +'</div>';
+}
+
   function notifications(){
   if (!main) return;
   main.innerHTML =
@@ -23407,6 +23524,12 @@ function renderInterests(customer){
       if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
       if (path === '/admin/ui/events') return eventsOverview();
       if (path === '/admin/ui/products') return productsOverview();
+      if (path === '/admin/ui/venues/overview') return venuesOverview();
+      if (path === '/admin/ui/promoters/overview') return promotersOverview();
+      if (path === '/admin/ui/customers/overview') return customersOverview();
+      if (path === '/admin/ui/store/overview') return storeOverview();
+      if (path === '/admin/ui/account/overview') return accountOverview();
+      if (path === '/admin/ui/ai/overview') return aiOverview();
       if (path === '/admin/ui/dashboard') return eventsDashboard();
       if (path === '/admin/ui/shows/create-ai') return createShowAI();
       if (path === '/admin/ui/ai/smart-storefront') return smartStorefront();
