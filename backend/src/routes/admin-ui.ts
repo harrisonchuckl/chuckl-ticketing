@@ -348,4 +348,13 @@ router.get("/products", (_req, res) => {
   res.send(adminUiHtml);
 });
 
+router.get("/ui", (_req, res) => {
+  res.redirect("/admin/ui/product-store/products");
+});
+
+router.get(["/ui/product-store", "/ui/product-store/products", "/ui/product-store/*"], (_req, res) => {
+  res.set("Content-Type", "text/html");
+  res.send(adminUiHtml);
+});
+
 export default router;
