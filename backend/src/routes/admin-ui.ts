@@ -16233,10 +16233,13 @@ function renderInterests(customer){
     
   }
 
-  function productStorePage(){
-    if (!main) return;
-    main.innerHTML = ''
-      + '<div class="card">'
+function productStorePage(mountNode, options){
+    var target = mountNode || main;
+    var navigate = options && options.navigate ? options.navigate : go;
+    if (!target) return;
+    target.innerHTML = ''
+    
+    + '<div class="card">'
       +   '<div class="header" style="gap:12px;align-items:center;">'
       +     '<div>'
       +       '<div class="title">Product Store</div>'
@@ -16334,13 +16337,13 @@ function renderInterests(customer){
     var btnUpsells = $('#ps_upsells');
     var btnCreateStore = $('#ps_create_store');
 
-    if (btnCreate) btnCreate.addEventListener('click', function(){ go('/admin/ui/product-store/create'); });
-    if (btnOrders) btnOrders.addEventListener('click', function(){ go('/admin/ui/product-store/orders'); });
-    if (btnOrdersFooter) btnOrdersFooter.addEventListener('click', function(){ go('/admin/ui/product-store/orders'); });
-    if (btnSettings) btnSettings.addEventListener('click', function(){ go('/admin/ui/product-store/settings'); });
-    if (btnUpsells) btnUpsells.addEventListener('click', function(){ go('/admin/ui/product-store/upsells'); });
-    if (btnCreateStore) btnCreateStore.addEventListener('click', function(){ go('/admin/ui/product-store/settings'); });
-
+     if (btnCreate) btnCreate.addEventListener('click', function(){ navigate('/admin/ui/product-store/create'); });
+    if (btnOrders) btnOrders.addEventListener('click', function(){ navigate('/admin/ui/product-store/orders'); });
+    if (btnOrdersFooter) btnOrdersFooter.addEventListener('click', function(){ navigate('/admin/ui/product-store/orders'); });
+    if (btnSettings) btnSettings.addEventListener('click', function(){ navigate('/admin/ui/product-store/settings'); });
+    if (btnUpsells) btnUpsells.addEventListener('click', function(){ navigate('/admin/ui/product-store/upsells'); });
+    if (btnCreateStore) btnCreateStore.addEventListener('click', function(){ navigate('/admin/ui/product-store/settings'); });
+    
     var searchBtn = $('#ps_search_btn');
     if (searchBtn){
       searchBtn.addEventListener('click', function(){ loadProducts(); });
@@ -16406,8 +16409,8 @@ function renderInterests(customer){
           row.addEventListener('click', function(){
             var product = (data.products || [])[idx-1];
             if (product){
-              go('/admin/ui/product-store/products/' + product.id + '/edit');
-            }
+   navigate('/admin/ui/product-store/products/' + product.id + '/edit');
+   }
           });
         });
       }catch(err){
@@ -16418,10 +16421,12 @@ function renderInterests(customer){
     loadSummary();
     loadProducts();
   }
-  function productStoreSettingsPage(){
-    if (!main) return;
-    main.innerHTML = ''
-      + '<div class="card">'
+  function productStoreSettingsPage(mountNode, options){
+    var target = mountNode || main;
+    var navigate = options && options.navigate ? options.navigate : go;
+    if (!target) return;
+    target.innerHTML = ''
+    + '<div class="card">'
       +   '<div class="title">Storefront settings</div>'
       +   '<div class="muted">Manage your store slug, branding, and tax/fulfilment defaults.</div>'
       +   '<div class="grid" style="margin-top:12px;">'
@@ -16453,8 +16458,8 @@ function renderInterests(customer){
       +   '</div>'
       + '</div>';
 
-    $('#ps_settings_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
-
+    $('#ps_settings_back').addEventListener('click', function(){ navigate('/admin/ui/product-store'); });
+    
     async function loadSettings(){
       try{
         var data = await j('/admin/api/product-store/storefront');
@@ -16512,11 +16517,14 @@ function renderInterests(customer){
     loadSettings();
   }
 
-  function productStoreProductForm(productId){
-    if (!main) return;
+ function productStoreProductForm(productId, options){
+    var target = (options && options.mount) ? options.mount : main;
+    var navigate = options && options.navigate ? options.navigate : go;
+    if (!target) return;
+  
     var isEdit = !!productId;
-    main.innerHTML = ''
-      + '<div class="ps-create-page">'
+    target.innerHTML = ''
+    + '<div class="ps-create-page">'
       +   '<div class="ps-create-shell">'
       +     '<div class="ps-header-section">'
       +       '<h1 class="ps-header-title">Product Store</h1>'
@@ -16808,8 +16816,8 @@ function renderInterests(customer){
     $('#ps_add_variant').addEventListener('click', function(){ addVariantRow(); });
     var cancelBtn = $('#ps_prod_cancel');
     if (cancelBtn){
-      cancelBtn.addEventListener('click', function(){ go('/admin/ui/product-store'); });
-    }
+ cancelBtn.addEventListener('click', function(){ navigate('/admin/ui/product-store'); });
+ }
     var importBtn = $('#ps_prod_import');
     if (importBtn){
       importBtn.addEventListener('click', async function(){
@@ -16823,8 +16831,8 @@ function renderInterests(customer){
           });
           if (data && data.product && data.product.id){
             showToast('Printful product imported.', true);
-            go('/admin/ui/product-store/products/' + data.product.id + '/edit');
-          }
+navigate('/admin/ui/product-store/products/' + data.product.id + '/edit');
+}
         }catch(err){
           showToast(parseErr(err), false);
         }
@@ -17036,8 +17044,8 @@ function renderInterests(customer){
         if (data && data.ok){
           $('#ps_prod_msg').textContent = 'Saved';
           if (!productId && data.product && data.product.id){
-            go('/admin/ui/product-store');
-          }
+navigate('/admin/ui/product-store');
+}
         }
       }catch(err){
         $('#ps_prod_msg').textContent = parseErr(err);
@@ -17047,10 +17055,12 @@ function renderInterests(customer){
     loadProduct();
   }
 
-  function productStoreOrdersPage(){
-    if (!main) return;
-    main.innerHTML = ''
-      + '<div class="card">'
+ function productStoreOrdersPage(mountNode, options){
+    var target = mountNode || main;
+    var navigate = options && options.navigate ? options.navigate : go;
+    if (!target) return;
+    target.innerHTML = ''
+    + '<div class="card">'
       +   '<div class="header">'
       +     '<div>'
       +       '<div class="title">Product orders</div>'
@@ -17069,7 +17079,7 @@ function renderInterests(customer){
       +   '</div>'
       + '</div>';
 
-    $('#ps_orders_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+$('#ps_orders_back').addEventListener('click', function(){ navigate('/admin/ui/product-store'); });
 
     function money(pence){
       return '£' + ((Number(pence || 0) / 100).toFixed(2));
@@ -17094,8 +17104,8 @@ function renderInterests(customer){
           if (idx === 0) return;
           row.addEventListener('click', function(){
             var order = (data.orders || [])[idx-1];
-            if (order){ go('/admin/ui/product-store/orders/' + order.id); }
-          });
+if (order){ navigate('/admin/ui/product-store/orders/' + order.id); }
+});
         });
       }catch(err){
         console.error('product orders load failed', err);
@@ -17192,10 +17202,12 @@ function renderInterests(customer){
     loadOrder();
   }
 
-  function productStoreUpsellsPage(){
-    if (!main) return;
-    main.innerHTML = ''
-      + '<div class="card">'
+ function productStoreUpsellsPage(mountNode, options){
+    var target = mountNode || main;
+    var navigate = options && options.navigate ? options.navigate : go;
+    if (!target) return;
+    target.innerHTML = ''
+    + '<div class="card">'
       +   '<div class="header">'
       +     '<div>'
       +       '<div class="title">Upsell rules</div>'
@@ -17215,7 +17227,7 @@ function renderInterests(customer){
       +   '<div id="ps_upsell_list" style="margin-top:12px;"></div>'
       + '</div>';
 
-    $('#ps_upsells_back').addEventListener('click', function(){ go('/admin/ui/product-store'); });
+$('#ps_upsells_back').addEventListener('click', function(){ navigate('/admin/ui/product-store'); });
 
     var state = { shows: [], products: [] };
 
@@ -22493,41 +22505,7 @@ if (!main) return;
             +'<button id="products-create-button" class="cta-button" style="background:#009fe3;color:white;font-size:20px;font-weight:600;padding:18px 48px;border:none;border-radius:12px;cursor:pointer;">Create Product</button>'
           +'</div>'
         +'</div>'
-        +'<div id="products-create-page" style="display:none;">'
-          +'<div style="text-align:center;max-width:600px;margin:80px auto;background:white;padding:80px 40px;border-radius:24px;box-shadow:0 8px 24px rgba(0, 0, 0, 0.1);">'
-            +'<div style="font-size:64px;margin-bottom:24px;">🛍️</div>'
-            +'<h2 style="font-size:36px;font-weight:700;margin:0 0 16px 0;color:#2d3748;">Create Product</h2>'
-            +'<p style="font-size:18px;color:#4a5568;margin:0;">Page coming soon</p>'
-          +'</div>'
-        +'</div>'
-        +'<div id="products-store-page" style="display:none;">'
-          +'<div style="text-align:center;max-width:600px;margin:80px auto;background:white;padding:80px 40px;border-radius:24px;box-shadow:0 8px 24px rgba(0, 0, 0, 0.1);">'
-            +'<div style="font-size:64px;margin-bottom:24px;">🏪</div>'
-            +'<h2 style="font-size:36px;font-weight:700;margin:0 0 16px 0;color:#2d3748;">Product Store</h2>'
-            +'<p style="font-size:18px;color:#4a5568;margin:0;">Page coming soon</p>'
-          +'</div>'
-        +'</div>'
-        +'<div id="products-orders-page" style="display:none;">'
-          +'<div style="text-align:center;max-width:600px;margin:80px auto;background:white;padding:80px 40px;border-radius:24px;box-shadow:0 8px 24px rgba(0, 0, 0, 0.1);">'
-            +'<div style="font-size:64px;margin-bottom:24px;">📦</div>'
-            +'<h2 style="font-size:36px;font-weight:700;margin:0 0 16px 0;color:#2d3748;">Orders</h2>'
-            +'<p style="font-size:18px;color:#4a5568;margin:0;">Page coming soon</p>'
-          +'</div>'
-        +'</div>'
-        +'<div id="products-settings-page" style="display:none;">'
-          +'<div style="text-align:center;max-width:600px;margin:80px auto;background:white;padding:80px 40px;border-radius:24px;box-shadow:0 8px 24px rgba(0, 0, 0, 0.1);">'
-            +'<div style="font-size:64px;margin-bottom:24px;">⚙️</div>'
-            +'<h2 style="font-size:36px;font-weight:700;margin:0 0 16px 0;color:#2d3748;">Settings</h2>'
-            +'<p style="font-size:18px;color:#4a5568;margin:0;">Page coming soon</p>'
-          +'</div>'
-        +'</div>'
-        +'<div id="products-upsells-page" style="display:none;">'
-          +'<div style="text-align:center;max-width:600px;margin:80px auto;background:white;padding:80px 40px;border-radius:24px;box-shadow:0 8px 24px rgba(0, 0, 0, 0.1);">'
-            +'<div style="font-size:64px;margin-bottom:24px;">💰</div>'
-            +'<h2 style="font-size:36px;font-weight:700;margin:0 0 16px 0;color:#2d3748;">Upsells</h2>'
-            +'<p style="font-size:18px;color:#4a5568;margin:0;">Page coming soon</p>'
-          +'</div>'
-        +'</div>'
+      +'<div id="products-subpage-content" style="display:none;"></div>'
       +'</div>'
     +'</div>';
     
@@ -22582,26 +22560,160 @@ if (!main) return;
 
   function bindProductsOverviewInteractions(){
     var createButton = document.getElementById('products-create-button');
-    if (createButton && !createButton.dataset.bound){
+   var navTabs = Array.prototype.slice.call(document.querySelectorAll('.products-overview-page .nav-tab'));
+    var tabLabels = {
+      create: 'Create Product',
+      store: 'Product Store',
+      orders: 'Orders',
+      settings: 'Settings',
+      upsells: 'Upsells'
+    };
+    var tabTitles = {
+      create: {
+        title: 'Create products that people love',
+        subtitle: 'Design and configure your products with custom pricing, images, and descriptions'
+      },
+      store: {
+        title: 'Your store, your rules, your vibe',
+        subtitle: 'Manage your product catalog, organize collections, and control your storefront visibility'
+      },
+      orders: {
+        title: 'Orders flying in? We got you',
+        subtitle: 'Track all customer orders, manage fulfillment status, and process refunds in one place'
+      },
+      settings: {
+        title: 'Tweak it till it feels just right',
+        subtitle: 'Configure store preferences, payment methods, shipping options, and notification settings'
+      },
+      upsells: {
+        title: 'More money, less effort. Nice',
+        subtitle: 'Create automated product recommendations and bundle offers to increase average order value'
+      }
+    };
+    
+     function resolvePageFromPath(path){
+      if (path === '/admin/ui/product-store') return 'store';
+      if (path === '/admin/ui/product-store/create' || path === '/admin/ui/product-store/products/new') return 'create';
+      if (path === '/admin/ui/product-store/orders') return 'orders';
+      if (path === '/admin/ui/product-store/settings') return 'settings';
+      if (path === '/admin/ui/product-store/upsells') return 'upsells';
+      return null;
+      
+      }
+
+    function renderProductsSubpage(page){
+      var overview = document.getElementById('products-overview-page');
+      var subpage = document.getElementById('products-subpage-content');
+      if (!overview || !subpage) return;
+
+      
+    if (!page){
+        overview.style.display = 'block';
+        subpage.style.display = 'none';
+        subpage.innerHTML = '';
+        return;
+      }
+      
+      overview.style.display = 'none';
+      subpage.style.display = 'block';
+      subpage.innerHTML = '';
+      
+        var embeddedNavigate = function(path){
+        var nextPage = resolvePageFromPath(path);
+        if (nextPage){
+          activateProductsTab(nextPage, { withLoading: false });
+          return;
+        }
+        go(path);
+      };
+      
+       var options = { navigate: embeddedNavigate };
+      if (page === 'create'){
+        productStoreProductForm(null, { mount: subpage, navigate: embeddedNavigate });
+      } else if (page === 'store'){
+        productStorePage(subpage, options);
+      } else if (page === 'orders'){
+        productStoreOrdersPage(subpage, options);
+      } else if (page === 'settings'){
+        productStoreSettingsPage(subpage, options);
+      } else if (page === 'upsells'){
+        productStoreUpsellsPage(subpage, options);
+      }
+    }
+
+    function setActiveTab(page){
+      navTabs.forEach(function(resetTab){
+        resetTab.style.background = 'white';
+        resetTab.style.color = '#4a5568';
+        resetTab.style.border = '2px solid #e2e8f0';
+      });
+
+      if (!page) return;
+      var active = navTabs.find(function(tab){
+        return tab.getAttribute('data-page') === page;
+      });
+      if (active){
+        active.style.background = '#009fe3';
+        active.style.color = 'white';
+        active.style.border = 'none';
+      }
+    }
+
+    function applyHeaderForPage(page){
+      var mainTitle = document.getElementById('products-main-title');
+      var subtitle = document.getElementById('products-subtitle');
+      var config = tabTitles[page];
+      if (!config || !mainTitle || !subtitle) return;
+      mainTitle.textContent = config.title;
+      subtitle.textContent = config.subtitle;
+      subtitle.style.color = '#4a5568';
+    }
+
+    function activateProductsTab(page, options){
+      var subtitle = document.getElementById('products-subtitle');
+      var mainTitle = document.getElementById('products-main-title');
+      var label = tabLabels[page] || page || '';
+      var withLoading = !options || options.withLoading !== false;
+      var originalSubtitle = subtitle ? subtitle.textContent : '';
+      var startTransition = function(){
+        if (mainTitle){
+          mainTitle.style.opacity = '0';
+          mainTitle.style.transition = 'opacity 0.5s ease';
+          
+          }
+
+          setTimeout(function(){
+          applyHeaderForPage(page);
+          if (mainTitle) mainTitle.style.opacity = '1';
+          renderProductsSubpage(page);
+        }, 500);
+      };
+
+      setActiveTab(page);
+
+      if (subtitle && withLoading){
+        subtitle.textContent = 'Navigating to ' + label + '...';
+        subtitle.style.color = '#009fe3';
+      }
+
+      if (withLoading){
+
+       startTransition();
+        }, 1500);
+      } else {
+        startTransition();
+      }
+    }
+if (createButton && !createButton.dataset.bound){
       createButton.dataset.bound = 'true';
       createButton.addEventListener('click', function(){
-        var button = document.getElementById('products-create-button');
-        if (!button) return;
-        var originalText = button.textContent;
-        button.textContent = '��� Opening...';
-        button.style.background = '#48bb78';
-
-        setTimeout(function(){
-          button.textContent = originalText || 'Create Product';
-          button.style.background = '#009fe3';
-        }, 1500);
+        activateProductsTab('create');
       });
     }
 
-    var navTabs = Array.prototype.slice.call(document.querySelectorAll('.products-overview-page .nav-tab'));
-    if (!navTabs.length) return;
-
-    navTabs.forEach(function(tab){
+        if (!navTabs.length) return;
+        
+        navTabs.forEach(function(tab){
       if (tab.dataset.bound === 'true') return;
       tab.dataset.bound = 'true';
       tab.addEventListener('click', function(event){
@@ -22609,74 +22721,8 @@ if (!main) return;
         if (!target) return;
         var page = target.getAttribute('data-page');
 
-        navTabs.forEach(function(resetTab){
-          resetTab.style.background = 'white';
-          resetTab.style.color = '#4a5568';
-          resetTab.style.border = '2px solid #e2e8f0';
-        });
-
-        target.style.background = '#009fe3';
-        target.style.color = 'white';
-        target.style.border = 'none';
-
-        var subtitle = document.getElementById('products-subtitle');
-        var originalSubtitle = subtitle ? subtitle.textContent : '';
-        if (subtitle){
-          subtitle.textContent = 'Navigating to ' + target.textContent + '...';
-          subtitle.style.color = '#009fe3';
-        }
-
-        setTimeout(function(){
-          if (subtitle){
-            subtitle.textContent = originalSubtitle;
-            subtitle.style.color = '#4a5568';
-          }
-
-          var mainTitle = document.getElementById('products-main-title');
-          if (mainTitle){
-            mainTitle.style.opacity = '0';
-            mainTitle.style.transition = 'opacity 0.5s ease';
-          }
-
-          setTimeout(function(){
-            if (mainTitle){
-              if (page === 'create'){
-                mainTitle.textContent = 'Create products that people love';
-                if (subtitle) subtitle.textContent = 'Design and configure your products with custom pricing, images, and descriptions';
-              } else if (page === 'store'){
-                mainTitle.textContent = 'Your store, your rules, your vibe';
-                if (subtitle) subtitle.textContent = 'Manage your product catalog, organize collections, and control your storefront visibility';
-              } else if (page === 'orders'){
-                mainTitle.textContent = 'Orders flying in? We got you';
-                if (subtitle) subtitle.textContent = 'Track all customer orders, manage fulfillment status, and process refunds in one place';
-              } else if (page === 'settings'){
-                mainTitle.textContent = 'Tweak it till it feels just right';
-                if (subtitle) subtitle.textContent = 'Configure store preferences, payment methods, shipping options, and notification settings';
-              } else if (page === 'upsells'){
-                mainTitle.textContent = 'More money, less effort. Nice';
-                if (subtitle) subtitle.textContent = 'Create automated product recommendations and bundle offers to increase average order value';
-              }
-              mainTitle.style.opacity = '1';
-            }
-          }, 500);
-
-          var pages = [
-            'products-overview-page',
-            'products-create-page',
-            'products-store-page',
-            'products-orders-page',
-            'products-settings-page',
-            'products-upsells-page'
-          ];
-
-          pages.forEach(function(pageId){
-            var pageEl = document.getElementById(pageId);
-            if (pageEl) pageEl.style.display = 'none';
-          });
-
-          var selectedPage = document.getElementById('products-' + page + '-page');
-          if (selectedPage) selectedPage.style.display = 'block';
-        }, 1500);
+        activateProductsTab(page);
+        
       });
     });
   }
