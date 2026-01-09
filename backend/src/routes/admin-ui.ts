@@ -1778,6 +1778,164 @@ router.get(
     .grid-2{grid-template-columns:repeat(2,1fr);}
     .grid-3{grid-template-columns:repeat(3,1fr);}
     .dashboard{display:grid;gap:16px;}
+    .welcome-dashboard{
+      min-height:calc(100vh - var(--header-h));
+      padding:60px 40px 80px;
+      background:linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+    .welcome-header{
+      text-align:center;
+      margin-bottom:60px;
+    }
+    .welcome-title{
+      font-size:56px;
+      font-weight:700;
+      margin:0 0 16px 0;
+      line-height:1.1;
+    }
+    .welcome-subtitle{
+      font-size:20px;
+      color:#4a5568;
+      margin:0;
+    }
+    .gradient-text{
+      background:linear-gradient(135deg, #009fe3 0%, #0077b3 100%);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .feature-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));
+      gap:32px;
+      max-width:1400px;
+      margin:0 auto;
+    }
+    .feature-card{
+      background:#ffffff;
+      border-radius:20px;
+      padding:32px;
+      box-shadow:0 4px 12px rgba(0, 0, 0, 0.08);
+      transition:transform 0.3s ease, box-shadow 0.3s ease;
+      display:flex;
+      flex-direction:column;
+      height:100%;
+    }
+    .feature-card:hover{
+      transform:translateY(-8px);
+      box-shadow:0 20px 40px rgba(0, 0, 0, 0.12);
+    }
+    .feature-badge{
+      display:inline-block;
+      background:rgba(0, 159, 227, 0.1);
+      color:#009fe3;
+      padding:4px 12px;
+      border-radius:20px;
+      font-size:12px;
+      font-weight:600;
+      margin-bottom:16px;
+      align-self:flex-start;
+    }
+    .feature-title{
+      font-size:24px;
+      font-weight:600;
+      margin:0 0 8px 0;
+      color:#2d3748;
+    }
+    .feature-description{
+      font-size:16px;
+      color:#718096;
+      margin:0 0 20px 0;
+      line-height:1.6;
+    }
+    .feature-list{
+      list-style:none;
+      padding:0;
+      margin:0 0 24px 0;
+      flex-grow:1;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .feature-list li{
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+      font-size:14px;
+      color:#4a5568;
+    }
+    .benefit-check{
+      width:20px;
+      height:20px;
+      flex-shrink:0;
+      margin-top:2px;
+      color:#009fe3;
+    }
+    .cta-button{
+      transition:all 0.3s ease;
+      background:linear-gradient(135deg, #009fe3 0%, #00b8e6 100%);
+      color:#ffffff;
+      font-weight:600;
+      padding:14px 28px;
+      border:none;
+      border-radius:12px;
+      cursor:pointer;
+      width:100%;
+      font-size:16px;
+      text-align:center;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .cta-button:hover{
+      transform:scale(1.02);
+      box-shadow:0 8px 20px rgba(0, 159, 227, 0.4);
+    }
+    .icon-box{
+      width:100%;
+      height:120px;
+      border-radius:12px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin-bottom:24px;
+    }
+    .welcome-footer{
+      text-align:center;
+      margin-top:80px;
+      padding:32px 0;
+      font-size:16px;
+      color:#718096;
+    }
+    .welcome-footer a{
+      color:#009fe3;
+      text-decoration:none;
+      font-weight:600;
+    }
+    @keyframes fadeInUp{
+      from{opacity:0;transform:translateY(20px);}
+      to{opacity:1;transform:translateY(0);}
+    }
+    .animate-in{animation:fadeInUp 0.6s ease-out forwards;opacity:0;}
+    .stagger-1{animation-delay:0.05s;}
+    .stagger-2{animation-delay:0.1s;}
+    .stagger-3{animation-delay:0.15s;}
+    .stagger-4{animation-delay:0.2s;}
+    .stagger-5{animation-delay:0.25s;}
+    .stagger-6{animation-delay:0.3s;}
+    .stagger-7{animation-delay:0.35s;}
+    .stagger-8{animation-delay:0.4s;}
+    .stagger-9{animation-delay:0.45s;}
+    .stagger-10{animation-delay:0.5s;}
+    .stagger-11{animation-delay:0.55s;}
+    .stagger-12{animation-delay:0.6s;}
+    @media (max-width: 900px){
+      .welcome-dashboard{padding:48px 20px 60px;}
+      .welcome-title{font-size:40px;}
+      .welcome-subtitle{font-size:18px;}
+      .feature-grid{grid-template-columns:1fr;}
+    }
     .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
     .kpi-card{
       background:#ffffff;
@@ -4609,111 +4767,241 @@ document.addEventListener('click', function(e){
   function home(){
     if (!main) return;
     main.innerHTML =
-      '<div class="dashboard">'
-      +  '<section class="kpi-grid" id="kpiGrid">'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
-      +  '</section>'
-      +  '<section class="hero-grid">'
-      +    '<div class="card" id="heroCard">'
-      +      '<div class="header">'
-      +        '<div>'
-      +          '<div class="title">Daily Performance</div>'
-      +          '<div class="muted">Last 30 days · Europe/London</div>'
-      +        '</div>'
-      +        '<div class="row chart-toggles" id="chartToggles"></div>'
+      '<section class="welcome-dashboard">'
+      +  '<header class="welcome-header">'
+      +    '<h1 class="welcome-title gradient-text">Welcome to Your Dashboard</h1>'
+      +    '<p class="welcome-subtitle">Everything you need to create, sell, and grow your events — all in one place.</p>'
+      +  '</header>'
+      +  '<div class="feature-grid">'
+      +    '<div class="feature-card animate-in stagger-1">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<rect x="8" y="10" width="44" height="44" rx="4" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<line x1="20" y1="6" x2="20" y2="14" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<line x1="40" y1="6" x2="40" y2="14" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<line x1="8" y1="22" x2="52" y2="22" stroke="white" stroke-width="2.5" />'
+      +          '<line x1="30" y1="34" x2="30" y2="44" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<line x1="25" y1="39" x2="35" y2="39" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +        '</svg>'
       +      '</div>'
-      +      '<div id="chartBody">'
-      +        '<div class="skeleton skeleton-line" style="height:200px;"></div>'
+      +      '<div class="feature-badge">50% Fee Kickback</div>'
+      +      '<h3 class="feature-title">Create &amp; Sell Events</h3>'
+      +      '<p class="feature-description">Build a show in minutes and start selling immediately — with a 50% kickback of the net booking fee.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Create events fast (templates, duplicates, quick publish)</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Ticketing built in (ticket types, fees, allocations, reporting)</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Earn more per sale with the booking fee kickback model</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create an Event</a>'
+      +    '</div>'
+      +    '<div class="feature-card animate-in stagger-2">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<circle cx="18" cy="18" r="8" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<circle cx="42" cy="18" r="8" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<circle cx="30" cy="42" r="8" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<line x1="23" y1="23" x2="27" y2="37" stroke="white" stroke-width="2.5" />'
+      +          '<line x1="37" y1="23" x2="33" y2="37" stroke="white" stroke-width="2.5" />'
+      +        '</svg>'
       +      '</div>'
+      +      '<div class="feature-badge">One Source of Truth</div>'
+      +      '<h3 class="feature-title">Link Shows to Everyone</h3>'
+      +      '<p class="feature-description">Connect everyone to the same show — no messy threads, no duplicated info.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Link a show to promoters, artists, venues and tour managers</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Shared visibility: who\'s responsible for what, and when</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Centralised notes, assets, approvals and comms per show</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Link Your First Show</a>'
       +    '</div>'
-      +    '<div class="card" id="alertsCard">'
-      +      '<div class="header"><div class="title">Early Warnings</div></div>'
-      +      '<div id="alertsBody">'
-      +        '<div class="skeleton skeleton-line"></div>'
-      +        '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +    '<div class="feature-card animate-in stagger-3">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<path d="M35 8H15C13 8 11 10 11 12V48C11 50 13 52 15 52H45C47 52 49 50 49 48V22L35 8Z" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<path d="M35 8V22H49" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<line x1="20" y1="32" x2="40" y2="32" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<line x1="20" y1="40" x2="40" y2="40" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +        '</svg>'
       +      '</div>'
+      +      '<div class="feature-badge">Version Control Built In</div>'
+      +      '<h3 class="feature-title">The Paperwork Hub</h3>'
+      +      '<p class="feature-description">Send, receive and store every show document in one place.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Contracts, tech specs, settlement sheets, PRS, marketing packs</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Version control + approvals so you always know what\'s current</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Everything attached to the show (not hidden in inboxes)</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Upload / Send Documents</a>'
       +    '</div>'
-      +  '</section>'
-      +  '<section class="card" id="aiInsightsCard">'
-      +    '<div class="header">'
-      +      '<div class="ai-insights-header">'
-      +        '<div class="title ai-insights-title">'
-      +          '<img src="/tixai.png" alt="TixAll AI" class="ai-insights-logo" />'
-      +          '<span>Insights</span>'
-      +        '</div>'
-      +        '<div class="muted" style="font-size:12px;">Next 21 days · rule-based insights</div>'
+      +    '<div class="feature-card animate-in stagger-4">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<path d="M14 10L10 18V48C10 50 11 52 13 52H47C49 52 50 50 50 48V18L46 10H14Z" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<line x1="10" y1="18" x2="50" y2="18" stroke="white" stroke-width="2.5" />'
+      +          '<path d="M38 26C38 31 34 35 30 35C26 35 22 31 22 26" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +        '</svg>'
       +      '</div>'
+      +      '<div class="feature-badge">Works Without Events</div>'
+      +      '<h3 class="feature-title">Products &amp; Merch</h3>'
+      +      '<p class="feature-description">Create products on TixAll even if you don\'t run events.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Sell merch, memberships, add-ons, bundles and extras</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Link products to shows (pre-orders, VIP, upsells)</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Simple stock/pricing management and performance tracking</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/product-store/create" data-view="/admin/ui/product-store/create">Create a Product</a>'
       +    '</div>'
-      +    '<div id="aiInsightsBody">'
-      +      '<div class="skeleton skeleton-line"></div>'
-      +      '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +    '<div class="feature-card animate-in stagger-5">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<path d="M10 22L30 8L50 22V48C50 50 48 52 46 52H14C12 52 10 50 10 48V22Z" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<rect x="22" y="32" width="16" height="20" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<line x1="30" y1="32" x2="30" y2="52" stroke="white" stroke-width="2.5" />'
+      +          '<line x1="22" y1="42" x2="38" y2="42" stroke="white" stroke-width="2.5" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">Embeddable Everywhere</div>'
+      +      '<h3 class="feature-title">Your Storefront</h3>'
+      +      '<p class="feature-description">A storefront that works as your online shop — and plugs into your existing website.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Public storefront page + listing on TixAll.com</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Embed widgets on venue sites, artist sites, partners, socials</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Unified reporting across tickets + products in one place</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/storefront" data-view="/admin/ui/storefront">Open Storefront</a>'
       +    '</div>'
-      +    '<div class="ai-insights-actions" id="aiInsightsActions"></div>'
-      +  '</section>'
-      +  '<section class="grid grid-2" id="showsGrid">'
-      +    '<div class="card" id="topShowsCard">'
-      +      '<div class="header"><div class="title">Top Performing Shows (7 days)</div></div>'
-      +      '<div id="topShowsBody"><div class="skeleton skeleton-line"></div></div>'
+      +    '<div class="feature-card animate-in stagger-6">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<circle cx="30" cy="30" r="8" stroke="#009fe3" stroke-width="2.5" fill="none" />'
+      +          '<path d="M46 35C46.5 34 47 33 47 32C47 28 44 25 40 24" stroke="#009fe3" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<path d="M14 35C13.5 34 13 33 13 32C13 28 16 25 20 24" stroke="#009fe3" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<path d="M35 46C34 46.5 33 47 32 47C28 47 25 44 24 40" stroke="#009fe3" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<path d="M35 14C34 13.5 33 13 32 13C28 13 25 16 24 20" stroke="#009fe3" stroke-width="2.5" stroke-linecap="round" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">Your Brand, Our Tech</div>'
+      +      '<h3 class="feature-title">White-Label Branding</h3>'
+      +      '<p class="feature-description">Make it feel like your brand — while keeping everything connected under the hood.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>White-label: All Events, Event Pages, Checkout, Login</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Brand controls: colours, logos, layout blocks, messaging</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>A closed-loop system: discovery → checkout → customer account</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/storefront" data-view="/admin/ui/storefront">Customise Branding</a>'
       +    '</div>'
-      +    '<div class="card" id="bottomShowsCard">'
-      +      '<div class="header"><div class="title">Needs Attention (7 days)</div></div>'
-      +      '<div id="bottomShowsBody"><div class="skeleton skeleton-line"></div></div>'
+      +    '<div class="feature-card animate-in stagger-7">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<circle cx="30" cy="20" r="10" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<path d="M12 48C12 38 20 30 30 30C40 30 48 38 48 48" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">Build Your Audience</div>'
+      +      '<h3 class="feature-title">Customer Accounts</h3>'
+      +      '<p class="feature-description">Customers can log in to your organiser page — so you build a repeat audience.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Organiser-specific customer logins (venue/promoter/tour level)</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Purchase history, saved details, quicker checkout</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Built to support loyalty features and member-only access</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/customers" data-view="/admin/ui/customers">Enable Customer Login</a>'
       +    '</div>'
-      +  '</section>'
-      +  '<section class="card" id="customerCard">'
-      +    '<div class="header"><div class="title">Customer Behaviour Snapshot</div></div>'
-      +    '<div id="customerBody">'
-      +      '<div class="skeleton skeleton-line"></div>'
-      +      '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +    '<div class="feature-card animate-in stagger-8">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<rect x="8" y="14" width="44" height="32" rx="3" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<path d="M8 18L30 32L52 18" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">No More Spam</div>'
+      +      '<h3 class="feature-title">Intelligent Email Marketing</h3>'
+      +      '<p class="feature-description">Stop blasting the same email over and over — send smarter campaigns automatically.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Segmentation that prevents repeat sends to the same customer</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Multi-step journeys (announce → reminder → last chance → thanks)</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Personalised content blocks per customer and behaviour</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/email" data-view="/admin/ui/email">Create a Campaign</a>'
       +    '</div>'
-      +  '</section>'
-      +'</div>'
-      +'<div class="widget-drawer" id="widgetDrawer" aria-hidden="true">'
-      +  '<div class="widget-drawer-panel" role="dialog" aria-modal="true">'
-      +    '<div class="widget-drawer-header">'
-      +      '<div class="widget-drawer-title">Home screen widgets</div>'
-      +      '<button class="btn" id="widgetDrawerClose" aria-label="Close">✕</button>'
+      +    '<div class="feature-card animate-in stagger-9">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<rect x="10" y="10" width="40" height="40" rx="8" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<circle cx="30" cy="25" r="6" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<path d="M20 42C20 36 24 32 30 32C36 32 40 36 40 42" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">Smart Scheduling</div>'
+      +      '<h3 class="feature-title">Planned Social Media</h3>'
+      +      '<p class="feature-description">A real posting plan that adapts to what needs selling — not random posts.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Auto-planned schedules by date, urgency and ticket momentum</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Drafts, approval workflow, and content variation built in</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Track what was posted and what actually performed</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/marketing" data-view="/admin/ui/marketing">View Social Plan</a>'
       +    '</div>'
-      +    '<div class="widget-drawer-helper">Tick to show a widget. Untick to hide it.</div>'
-      +    '<div id="widgetDrawerError" class="error" style="display:none;"></div>'
-      +    '<div id="widgetDrawerList" class="grid" style="gap:12px;"></div>'
+      +    '<div class="feature-card animate-in stagger-10">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<circle cx="30" cy="18" r="6" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<path d="M30 24V36" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<path d="M14 36C14 28 20 24 30 24C40 24 46 28 46 36" stroke="white" stroke-width="2.5" stroke-linecap="round" />'
+      +          '<circle cx="20" cy="38" r="2" fill="white" />'
+      +          '<circle cx="30" cy="42" r="2" fill="white" />'
+      +          '<circle cx="40" cy="38" r="2" fill="white" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">AI-Powered</div>'
+      +      '<h3 class="feature-title">AI Tools &amp; Forecasting</h3>'
+      +      '<p class="feature-description">Spot risk early and focus your time where it moves the needle.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Estimated tickets out + momentum tracking</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Flags shows that need support (and suggests actions)</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>AI-assisted show creation (faster setup, fewer errors)</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">Open AI Insights</a>'
+      +    '</div>'
+      +    '<div class="feature-card animate-in stagger-11">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<path d="M30 10L35 24L50 26L40 36L43 50L30 42L17 50L20 36L10 26L25 24L30 10Z" stroke="white" stroke-width="2.5" fill="none" stroke-linejoin="round" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">Sell More Automatically</div>'
+      +      '<h3 class="feature-title">Personalised Recommendations</h3>'
+      +      '<p class="feature-description">Help returning customers find shows they\'ll love faster.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>"Recommended for you" on organiser pages and storefront</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Based on behaviour (views, purchases, location, preferences)</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Improves conversion without extra ad spend</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Enable Recommendations</a>'
+      +    '</div>'
+      +    '<div class="feature-card animate-in stagger-12">'
+      +      '<div class="icon-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">'
+      +        '<svg width="60" height="60" viewBox="0 0 60 60" fill="none">'
+      +          '<rect x="8" y="32" width="10" height="18" rx="2" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<rect x="25" y="20" width="10" height="30" rx="2" stroke="white" stroke-width="2.5" fill="none" />'
+      +          '<rect x="42" y="12" width="10" height="38" rx="2" stroke="white" stroke-width="2.5" fill="none" />'
+      +        '</svg>'
+      +      '</div>'
+      +      '<div class="feature-badge">Data-Driven Decisions</div>'
+      +      '<h3 class="feature-title">Post-Show Analytics</h3>'
+      +      '<p class="feature-description">Understand peaks, trends, and customer behaviour after every show.</p>'
+      +      '<ul class="feature-list">'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Sales peaks, conversion trends, and ticket type performance</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Customer demographics and geographic insights</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Export reports for settlement and future planning</span></li>'
+      +      '</ul>'
+      +      '<a class="cta-button" href="/admin/ui/analytics" data-view="/admin/ui/analytics">View Analytics</a>'
+      +    '</div>'
       +  '</div>'
-      +'</div>';
-
-    var drawer = $('#widgetDrawer');
-    if (drawer && !widgetDrawerEventsBound){
-      var closeBtn = $('#widgetDrawerClose');
-      if (closeBtn){
-        closeBtn.addEventListener('click', function(){
-          closeWidgetDrawer();
-        });
-      }
-      drawer.addEventListener('click', function(e){
-        if (e.target === drawer){
-          closeWidgetDrawer();
-        }
-      });
-      document.addEventListener('keydown', function(e){
-        if (e.key === 'Escape'){
-          closeWidgetDrawer();
-        }
-      });
-      widgetDrawerEventsBound = true;
-    }
-
-    loadWidgetPreferences().then(function(){
-      applyWidgetVisibility();
-      renderDashboard();
-      renderWidgetDrawer();
-    });
+      +  '<footer class="welcome-footer">'
+      +    '<p>Need help getting started? <a href="/admin/ui/account" data-view="/admin/ui/account">Contact our team</a></p>'
+      +  '</footer>'
+      +'</section>';
   }
 
   async function ownerConsoleOverviewPage(){
