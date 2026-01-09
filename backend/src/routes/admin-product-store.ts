@@ -12,7 +12,7 @@ import {
 } from "@prisma/client";
 import prisma from "../lib/prisma.js";
 import { requireAdminOrOrganiser } from "../lib/authz.js";
-import { ensureUniqueSlug, slugify } from "../lib/storefront.js";
+import { ensureStorefrontForUser, ensureUniqueSlug, slugify } from "../lib/storefront.js";
 
 const router = Router();
 
@@ -303,8 +303,8 @@ router.get("/product-store/products/:id", requireAdminOrOrganiser, async (req, r
 
 router.post("/product-store/products", requireAdminOrOrganiser, async (req, res) => {
   try {
-    const { storefront } = await loadStorefrontForRequest(req);
-    if (!storefront) return res.status(404).json({ ok: false, error: "Storefront not found" });
+    const { storefront, ownerUserId } = await loadStorefrontForRequest(req);
+    const activeStorefront = storefront ?? (await ensureStorefrontForUser(ownerUserId));
 
     const payload = req.body || {};
     const title = String(payload.title || "").trim();
@@ -313,13 +313,13 @@ router.post("/product-store/products", requireAdminOrOrganiser, async (req, res)
     const slugValue = slugify(String(payload.slug || title));
 
     const existing = await prisma.product.findFirst({
-      where: { storefrontId: storefront.id, slug: slugValue },
+      where: { storefrontId: activeStorefront.id, slug: slugValue },
     });
     if (existing) return res.status(409).json({ ok: false, error: "Product slug already exists" });
 
     const product = await prisma.product.create({
       data: {
-        storefrontId: storefront.id,
+        storefrontId: activeStorefront.id,
         title,
         slug: slugValue,
         description: payload.description || null,
