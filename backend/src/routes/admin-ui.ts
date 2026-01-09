@@ -4809,7 +4809,7 @@ document.addEventListener('click', function(e){
       +      '<p class="feature-description">Connect everyone to the same show — no messy threads, no duplicated info.</p>'
       +      '<ul class="feature-list">'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Link a show to promoters, artists, venues and tour managers</span></li>'
-      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Shared visibility: who\'s responsible for what, and when</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Shared visibility: who is responsible for what, and when</span></li>'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Centralised notes, assets, approvals and comms per show</span></li>'
       +      '</ul>'
       +      '<a class="cta-button" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Link Your First Show</a>'
@@ -4828,7 +4828,7 @@ document.addEventListener('click', function(e){
       +      '<p class="feature-description">Send, receive and store every show document in one place.</p>'
       +      '<ul class="feature-list">'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Contracts, tech specs, settlement sheets, PRS, marketing packs</span></li>'
-      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Version control + approvals so you always know what\'s current</span></li>'
+      +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Version control + approvals so you always know what is current</span></li>'
       +        '<li><svg class="benefit-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12" /></svg><span>Everything attached to the show (not hidden in inboxes)</span></li>'
       +      '</ul>'
       +      '<a class="cta-button" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Upload / Send Documents</a>'
@@ -23942,7 +23942,6 @@ if (_docParas.length >= 2) {
   const maybeTitle = _docParas[0];
   const rest = _docParas.slice(1);
 
-  // Heuristic: first line is a title if it's reasonably short and not obviously a sentence.
   const titleLooksLikeTitle = maybeTitle.length <= 140 && !/[.!?]$/.test(maybeTitle);
 
   const descParas = titleLooksLikeTitle ? rest : _docParas;
