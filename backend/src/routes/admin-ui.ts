@@ -3624,7 +3624,8 @@ router.get(
             </svg>
           </button>
           <div class="sb-submenu" data-submenu="events">
-            <a class="sb-link sub" href="/admin/ui/home" data-view="/admin/ui/home">Dashboard</a>
+            <a class="sb-link sub" href="/admin/ui/dashboard" data-view="/admin/ui/dashboard">Dashboard</a>
+            <a class="sb-link sub" href="/admin/ui/home" data-view="/admin/ui/home">Home</a>
             <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
             <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
           </div>
@@ -4764,6 +4765,122 @@ document.addEventListener('click', function(e){
 
   window.addEventListener('popstate', route);
 
+  function eventsDashboard(){
+    if (!main) return;
+    main.innerHTML =
+      '<div class="dashboard">'
+      +  '<section class="kpi-grid" id="kpiGrid">'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +    '<div class="kpi-card skeleton skeleton-tile"></div>'
+      +  '</section>'
+      +  '<section class="hero-grid">'
+      +    '<div class="card" id="heroCard">'
+      +      '<div class="header">'
+      +        '<div>'
+      +          '<div class="title">Daily Performance</div>'
+      +          '<div class="muted">Last 30 days · Europe/London</div>'
+      +        '</div>'
+      +        '<div class="row chart-toggles" id="chartToggles"></div>'
+      +      '</div>'
+      +      '<div id="chartBody">'
+      +        '<div class="skeleton skeleton-line" style="height:200px;"></div>'
+      +      '</div>'
+      +      '<div class="row" style="justify-content:space-between;margin-top:10px;">'
+      +        '<button class="btn secondary" id="widgetDrawerToggle" type="button">Home screen widgets</button>'
+      +        '<a class="btn" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create show</a>'
+      +      '</div>'
+      +    '</div>'
+      +    '<div class="card" id="alertsCard">'
+      +      '<div class="header">'
+      +        '<div>'
+      +          '<div class="title">Early Warnings</div>'
+      +          '<div class="muted">Signals that need attention</div>'
+      +        '</div>'
+      +      '</div>'
+      +      '<div id="alertsBody">'
+      +        '<div class="skeleton skeleton-line"></div>'
+      +        '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +        '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +      '</div>'
+      +    '</div>'
+      +  '</section>'
+      +  '<section class="card" id="aiInsightsCard">'
+      +    '<div class="header" style="align-items:flex-start;">'
+      +      '<div style="flex:1;">'
+      +        '<div class="title">AI Insights</div>'
+      +        '<div class="muted" style="font-size:12px;">Next 21 days · rule-based insights</div>'
+      +      '</div>'
+      +    '</div>'
+      +    '<div id="aiInsightsBody">'
+      +      '<div class="skeleton skeleton-line"></div>'
+      +      '<div class="skeleton skeleton-line" style="margin-top:8px;"></div>'
+      +    '</div>'
+      +    '<div class="ai-insights-actions" id="aiInsightsActions"></div>'
+      +  '</section>'
+      +  '<section class="grid grid-2" id="showsGrid">'
+      +    '<div class="card" id="topShowsCard">'
+      +      '<div class="header"><div class="title">Top Performing Shows (7 days)</div></div>'
+      +      '<div id="topShowsBody"><div class="skeleton skeleton-line"></div></div>'
+      +    '</div>'
+      +    '<div class="card" id="bottomShowsCard">'
+      +      '<div class="header"><div class="title">Needs Attention (7 days)</div></div>'
+      +      '<div id="bottomShowsBody"><div class="skeleton skeleton-line"></div></div>'
+      +    '</div>'
+      +  '</section>'
+      +  '<section class="card" id="snapshotCard">'
+      +    '<div class="header"><div class="title">Customer Behaviour Snapshot</div></div>'
+      +    '<div id="snapshotBody"><div class="skeleton skeleton-line"></div></div>'
+      +  '</section>'
+      +  '</div>'
+      +  '<div class="widget-drawer hidden" id="widgetDrawer">'
+      +    '<div class="widget-drawer-inner">'
+      +      '<div class="widget-drawer-header">'
+      +        '<div>'
+      +          '<div class="title">Dashboard widgets</div>'
+      +          '<div class="muted" style="font-size:12px;">Choose what appears on your dashboard</div>'
+      +        '</div>'
+      +        '<button class="btn secondary" id="widgetDrawerClose" type="button">Close</button>'
+      +      '</div>'
+      +      '<div class="widget-list" id="widgetList"></div>'
+      +      '<div class="row" style="justify-content:flex-end;margin-top:12px;">'
+      +        '<button class="btn" id="widgetDrawerSave" type="button">Save</button>'
+      +      '</div>'
+      +    '</div>'
+      +  '</div>';
+
+    if ($('#widgetDrawerToggle') && !$('#widgetDrawerToggle').dataset.bound){
+      $('#widgetDrawerToggle').dataset.bound = 'true';
+      $('#widgetDrawerToggle').addEventListener('click', function(){
+        openWidgetDrawer();
+      });
+    }
+
+    if ($('#widgetDrawerClose') && !$('#widgetDrawerClose').dataset.bound){
+      $('#widgetDrawerClose').dataset.bound = 'true';
+      $('#widgetDrawerClose').addEventListener('click', function(){
+        closeWidgetDrawer();
+      });
+    }
+
+    if ($('#widgetDrawerSave') && !$('#widgetDrawerSave').dataset.bound){
+      $('#widgetDrawerSave').dataset.bound = 'true';
+      $('#widgetDrawerSave').addEventListener('click', function(){
+        saveWidgetPreferences();
+      });
+    }
+
+    loadWidgetPreferences().then(function(){
+      applyWidgetVisibility();
+      renderWidgetDrawer();
+      renderDashboard();
+    });
+  }
+
   function home(){
     if (!main) return;
     main.innerHTML =
@@ -5557,11 +5674,13 @@ document.addEventListener('click', function(e){
   var widgetDrawerEventsBound = false;
 
   function setWidgetState(widgets){
-    widgetState.list = widgets || [];
-    widgetState.byKey = widgetState.list.reduce(function(acc, item){
-      acc[item.key] = item;
-      return acc;
-    }, {});
+    widgetState.list = (widgets || []).slice().sort(function(a, b){
+      return (a.order || 0) - (b.order || 0);
+    });
+    widgetState.byKey = {};
+    widgetState.list.forEach(function(w){
+      widgetState.byKey[w.key] = w;
+    });
   }
 
   function isWidgetEnabled(key){
@@ -5582,54 +5701,89 @@ document.addEventListener('click', function(e){
     }
   }
 
-  function applyWidgetVisibility(){
-    var heroCard = $('#heroCard');
-    var alertsCard = $('#alertsCard');
-    var topShowsCard = $('#topShowsCard');
-    var bottomShowsCard = $('#bottomShowsCard');
-    var customerCard = $('#customerCard');
-    var heroGrid = document.querySelector('.hero-grid');
-    var showsGrid = $('#showsGrid');
+  function getWidgetPayload(){
+    return widgetState.list.map(function(w, idx){
+      return { key: w.key, enabled: !!w.enabled, order: idx + 1 };
+    });
+  }
 
-    if (heroCard) heroCard.style.display = isWidgetEnabled('daily_performance') ? '' : 'none';
-    if (alertsCard) alertsCard.style.display = isWidgetEnabled('early_warnings') ? '' : 'none';
-    if (topShowsCard) topShowsCard.style.display = isWidgetEnabled('top_performing_shows') ? '' : 'none';
-    if (bottomShowsCard) bottomShowsCard.style.display = isWidgetEnabled('needs_attention') ? '' : 'none';
-    if (customerCard) customerCard.style.display = isWidgetEnabled('customer_behaviour_snapshot') ? '' : 'none';
-
-    if (heroGrid){
-      heroGrid.style.display = (isWidgetEnabled('daily_performance') || isWidgetEnabled('early_warnings')) ? '' : 'none';
-    }
-    if (showsGrid){
-      showsGrid.style.display = (isWidgetEnabled('top_performing_shows') || isWidgetEnabled('needs_attention')) ? '' : 'none';
+  async function saveWidgetPreferences(){
+    var btn = $('#widgetDrawerSave');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try{
+      var payload = { widgets: getWidgetPayload() };
+      var resp = await fetchJson('/admin/ui/api/home-widgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!resp || !resp.ok){
+        throw new Error((resp && resp.error) || 'Failed to save widgets');
+      }
+      setWidgetState(resp.widgets || []);
+      applyWidgetVisibility();
+      renderWidgetDrawer();
+      showToast('Dashboard widgets saved.', true);
+    }catch(err){
+      showToast(parseErr(err), false);
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Save';
     }
   }
 
-  function applyWidgetUpdate(updatedList){
-    setWidgetState(updatedList || []);
-    applyWidgetVisibility();
-    if (dashboardCache.summary && dashboardCache.summary.ok){
-      renderKpiTiles(dashboardCache.summary, dashboardCache.kickback);
-      if (isWidgetEnabled('customer_behaviour_snapshot')){
-        renderCustomerSnapshot(dashboardCache.summary.customerSnapshot);
-      }
+  function applyWidgetVisibility(){
+    var heroCard = $('#heroCard');
+    if (heroCard){
+      heroCard.style.display = isWidgetEnabled('daily_performance') ? '' : 'none';
     }
-    if (dashboardCache.topShows && dashboardCache.topShows.ok){
-      if (isWidgetEnabled('top_performing_shows')){
-        renderShows('topShowsBody', dashboardCache.topShows.top);
-      }
-      if (isWidgetEnabled('needs_attention')){
-        renderShows('bottomShowsBody', dashboardCache.topShows.bottom);
-      }
+    var alertsCard = $('#alertsCard');
+    if (alertsCard){
+      alertsCard.style.display = isWidgetEnabled('early_warnings') ? '' : 'none';
     }
-    if (dashboardCache.alerts && dashboardCache.alerts.ok && isWidgetEnabled('early_warnings')){
-      renderAlerts(dashboardCache.alerts);
+    var aiCard = $('#aiInsightsCard');
+    if (aiCard){
+      aiCard.style.display = isWidgetEnabled('ai_insights') ? '' : 'none';
     }
-    if (isWidgetEnabled('daily_performance')){
-      renderChartToggles();
-      loadTimeseries(chartMetric);
+    var topShows = $('#topShowsCard');
+    if (topShows){
+      topShows.style.display = isWidgetEnabled('top_performing_shows') ? '' : 'none';
     }
-    renderWidgetDrawer();
+    var bottomShows = $('#bottomShowsCard');
+    if (bottomShows){
+      bottomShows.style.display = isWidgetEnabled('needs_attention') ? '' : 'none';
+    }
+    var snapshot = $('#snapshotCard');
+    if (snapshot){
+      snapshot.style.display = isWidgetEnabled('customer_behaviour_snapshot') ? '' : 'none';
+    }
+  }
+
+  function openWidgetDrawer(){
+    var drawer = $('#widgetDrawer');
+    if (!drawer) return;
+    drawer.classList.remove('hidden');
+    if (!widgetDrawerEventsBound){
+      widgetDrawerEventsBound = true;
+      drawer.addEventListener('click', function(e){
+        if (e.target === drawer){
+          closeWidgetDrawer();
+        }
+      });
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape'){
+          closeWidgetDrawer();
+        }
+      });
+    }
+  }
+
+  function closeWidgetDrawer(){
+    var drawer = $('#widgetDrawer');
+    if (!drawer) return;
+    drawer.classList.add('hidden');
   }
 
   function renderKpiTiles(summary, kickback){
@@ -5662,16 +5816,10 @@ document.addEventListener('click', function(e){
         delta: summary.comparisons.net
       },
       {
-        key: 'average_order_value',
-        label: 'Average order value',
-        value: formatMoney(summary.current.aov || 0),
-        delta: summary.comparisons.aov
-      },
-      {
-        key: 'new_customers_7d',
-        label: 'New customers (7d)',
-        value: fmtNumber.format(summary.current.newCustomers || 0),
-        delta: summary.comparisons.newCustomers
+        key: 'customers_7d',
+        label: 'Customers (7d)',
+        value: fmtNumber.format(summary.current.customers || 0),
+        delta: summary.comparisons.customers
       },
       {
         key: 'returning_customers_7d',
@@ -5683,143 +5831,62 @@ document.addEventListener('click', function(e){
         key: 'refunds_7d',
         label: 'Refunds (7d)',
         value: formatMoney(summary.current.refunds || 0),
-        sub: fmtNumber.format(summary.current.refundsCount || 0) + ' refunds',
         delta: summary.comparisons.refunds
       }
     ];
 
-    var html = tiles.filter(function(tile){
-      return isWidgetEnabled(tile.key);
-    }).map(function(tile){
+    if (kickback && kickback.ok){
+      tiles.unshift({
+        key: 'booking_fee_kickback',
+        label: 'Booking fee kickback (7d)',
+        value: formatMoney(kickback.totalKickbackPence || 0),
+        delta: kickback.deltaPct || 0
+      });
+    }
+
+    grid.innerHTML = tiles.filter(function(t){ return isWidgetEnabled(t.key); }).map(function(t){
       return (
         '<div class="kpi-card">'
-        + '<div class="kpi-label">' + tile.label + '</div>'
-        + '<div class="kpi-value">' + tile.value + '</div>'
-        + (tile.sub ? '<div class="muted" style="font-size:12px;">' + tile.sub + '</div>' : '')
-        + '<div class="kpi-meta">vs prev 7d ' + renderDelta(tile.delta) + '</div>'
+        + '<div class="kpi-label">' + t.label + '</div>'
+        + '<div class="kpi-value">' + t.value + '</div>'
+        + '<div class="kpi-foot">'
+        + (typeof t.delta === 'number' ? renderDelta(t.delta) : '')
+        + '</div>'
         + '</div>'
       );
-    }).join('');
-
-    if (isWidgetEnabled('booking_fee_kickback')){
-      var kick = kickback || { last7: 0, mtd: 0, last52w: 0 };
-      html += (
-        '<div class="kpi-card booking-kickback">'
-        + '<div class="kpi-label">Booking Fee Kickback</div>'
-        + '<div class="kick-row"><span>7 days</span><strong>' + formatMoney(kick.last7 || 0) + '</strong></div>'
-        + '<div class="kick-row"><span>This month</span><strong>' + formatMoney(kick.mtd || 0) + '</strong></div>'
-        + '<div class="kick-row"><span>52 weeks</span><strong>' + formatMoney(kick.last52w || 0) + '</strong></div>'
-        + '</div>'
-      );
-    }
-
-    html += (
-      '<div class="kpi-card widget-add-card" id="widgetAddTile" role="button" tabindex="0">'
-      + '<div class="widget-add-icon">+</div>'
-      + '<div class="kpi-value" style="font-size:14px;font-weight:700;">Add or edit widgets</div>'
-      + '<div class="muted" style="font-size:12px;">on your home screen</div>'
-      + '</div>'
-    );
-
-    grid.innerHTML = html;
-
-    var addTile = $('#widgetAddTile');
-    if (addTile){
-      addTile.addEventListener('click', function(){
-        openWidgetDrawer();
-      });
-      addTile.addEventListener('keydown', function(e){
-        if (e.key === 'Enter' || e.key === ' '){
-          e.preventDefault();
-          openWidgetDrawer();
-        }
-      });
-    }
+    }).join('') || '<div class="empty-state">No KPI tiles enabled.</div>';
   }
 
   function renderWidgetDrawer(){
-    var listEl = $('#widgetDrawerList');
+    var listEl = $('#widgetList');
     if (!listEl) return;
+    if (!widgetState.list.length){
+      listEl.innerHTML = '<div class="empty-state">No widgets available.</div>';
+      return;
+    }
 
-    var groups = {};
-    (widgetState.list || []).forEach(function(widget){
-      if (!groups[widget.category]) groups[widget.category] = [];
-      groups[widget.category].push(widget);
-    });
-
-    var orderedCategories = ['Sales', 'Customers', 'Financial', 'Operations', 'Marketing'];
-    listEl.innerHTML = orderedCategories.filter(function(cat){
-      return groups[cat] && groups[cat].length;
-    }).map(function(category){
-      var items = groups[category] || [];
-      var itemHtml = items.map(function(widget){
-        var isLoading = !!widgetLoading[widget.key];
-        var checked = widget.enabled ? 'checked' : '';
-        return (
-          '<label class="widget-item' + (isLoading ? ' loading' : '') + '">'
-          + '<span class="widget-item-label">' + widget.title + '</span>'
-          + '<span class="row" style="gap:8px;align-items:center;">'
-          +   (isLoading ? '<span class="widget-item-status">Saving…</span>' : '')
-          +   '<input type="checkbox" data-widget-key="' + widget.key + '" ' + checked + ' ' + (isLoading ? 'disabled' : '') + ' />'
-          + '</span>'
-          + '</label>'
-        );
-      }).join('');
-
+    listEl.innerHTML = widgetState.list.map(function(w){
+      var isLoading = !!widgetLoading[w.key];
       return (
-        '<div class="widget-group">'
-        + '<div class="widget-group-title">' + category + '</div>'
-        + itemHtml
+        '<label class="widget-item' + (isLoading ? ' loading' : '') + '">'
+        + '<input type="checkbox" data-widget="' + w.key + '" ' + (w.enabled ? 'checked' : '') + ' />'
+        + '<div class="widget-item-meta">'
+        + '<div class="widget-item-title">' + w.title + '</div>'
+        + '<div class="muted" style="font-size:12px;">' + (w.category || 'Other') + '</div>'
         + '</div>'
+        + '</label>'
       );
     }).join('');
 
-    $$('#widgetDrawerList input[type="checkbox"]').forEach(function(input){
-      input.addEventListener('change', async function(){
-        var key = input.getAttribute('data-widget-key');
-        if (!key) return;
-        var nextEnabled = input.checked;
-        widgetLoading[key] = true;
-        renderWidgetDrawer();
-        try{
-          var resp = await j('/admin/ui/api/home-widgets', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ widgetKey: key, enabled: nextEnabled })
-          });
-          if (resp && resp.ok){
-            widgetLoading[key] = false;
-            applyWidgetUpdate(resp.widgets || []);
-            var err = $('#widgetDrawerError');
-            if (err){ err.style.display = 'none'; err.textContent = ''; }
-          }else{
-            throw new Error((resp && resp.error) || 'Failed to update widget');
-          }
-        }catch(e){
-          widgetLoading[key] = false;
-          var errEl = $('#widgetDrawerError');
-          if (errEl){
-            errEl.textContent = 'Sorry, we could not save that change. Please try again.';
-            errEl.style.display = 'block';
-          }
-          renderWidgetDrawer();
-        }
+    Array.prototype.slice.call(listEl.querySelectorAll('input[type="checkbox"][data-widget]')).forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var key = cb.getAttribute('data-widget');
+        var item = widgetState.byKey[key];
+        if (!item) return;
+        item.enabled = !!cb.checked;
+        applyWidgetVisibility();
       });
     });
-  }
-
-  function openWidgetDrawer(){
-    var drawer = $('#widgetDrawer');
-    if (!drawer) return;
-    drawer.classList.add('open');
-    drawer.setAttribute('aria-hidden', 'false');
-  }
-
-  function closeWidgetDrawer(){
-    var drawer = $('#widgetDrawer');
-    if (!drawer) return;
-    drawer.classList.remove('open');
-    drawer.setAttribute('aria-hidden', 'true');
   }
 
   var timeseriesCache = {};
@@ -5852,140 +5919,87 @@ document.addEventListener('click', function(e){
   }
 
   function renderChart(series, metric){
-    var chartBody = $('#chartBody');
-    if (!chartBody) return;
+    var body = $('#chartBody');
+    if (!body) return;
 
     if (!series || !series.length){
-      chartBody.innerHTML = '<div class="empty-state">No orders in this period yet.</div>';
+      body.innerHTML = '<div class="empty-state">No data yet.</div>';
       return;
     }
 
-    var maxValue = Math.max.apply(null, series.map(function(d){ return d.value || 0; })) || 1;
-    var axisSteps = 4;
-    var step = getNiceStep(maxValue, axisSteps);
-    var maxTick = step * axisSteps;
-    var barsHtml = series.map(function(point, idx){
-      var height = Math.max(4, Math.round((point.value / maxTick) * 100));
-      var isActive = idx === series.length - 1 ? ' active' : '';
-      var labelValue = isMoneyMetric(metric)
-        ? formatMoney(point.value)
-        : fmtNumber.format(point.value || 0);
-      return '<div class="chart-bar' + isActive + '" style="height:' + height + '%;" data-date="'
-        + point.date + '" data-label="' + labelValue + '" data-tickets="'
-        + (point.tickets || 0) + '" data-gross="' + (point.gross || 0) + '" data-platform="'
-        + (point.platformFees || 0) + '" data-organiser="' + (point.organiserShare || 0) + '"></div>';
+    var values = series.map(function(p){ return p.value || 0; });
+    var maxV = Math.max.apply(Math, values.concat([0]));
+    var step = getNiceStep(maxV, 5);
+    var maxGrid = Math.ceil(maxV / step) * step;
+
+    var bars = series.map(function(p){
+      var pct = maxGrid ? (p.value / maxGrid) * 100 : 0;
+      var label = p.date ? fmtDate.format(new Date(p.date)) : '';
+      var valueLabel = isMoneyMetric(metric) ? formatMoney(p.valuePence || 0) : fmtNumber.format(p.value || 0);
+      return (
+        '<div class="chart-bar" title="' + label + ': ' + valueLabel + '">'
+        + '<div class="chart-bar-fill" style="height:' + pct + '%"></div>'
+        + '</div>'
+      );
     }).join('');
 
-    var startLabel = fmtDate.format(new Date(series[0].date));
-    var endLabel = fmtDate.format(new Date(series[series.length - 1].date));
-    var ticksHtml = '';
-    for (var i = axisSteps; i >= 0; i -= 1){
-      var tickValue = Math.round(step * i);
-      var tickLabel = isMoneyMetric(metric)
-        ? formatMoney(tickValue)
-        : fmtNumber.format(tickValue);
-      ticksHtml += '<div class="tick"><span>' + tickLabel + '</span></div>';
+    var yTicks = [];
+    for (var t = 0; t <= maxGrid; t += step){
+      yTicks.push(t);
     }
+    var yAxis = yTicks.reverse().map(function(t){
+      var lbl = isMoneyMetric(metric) ? fmtMoney.format(t / 100) : fmtNumber.format(t);
+      return '<div class="chart-y-tick">' + lbl + '</div>';
+    }).join('');
 
-    chartBody.innerHTML =
+    body.innerHTML =
       '<div class="chart-layout">'
-      + '<div class="chart-y-axis">' + ticksHtml + '</div>'
-      + '<div class="chart-plot">'
-      + '<div class="chart-wrap">' + barsHtml + '</div>'
-      + '<div class="chart-axis"><span>' + startLabel + '</span><span>' + endLabel + '</span></div>'
-      + '<div class="chart-tooltip" id="chartTooltip" aria-hidden="true"></div>'
-      + '</div>'
+      +  '<div class="chart-y">' + yAxis + '</div>'
+      +  '<div class="chart-bars">' + bars + '</div>'
       + '</div>';
-
-    var tooltip = $('#chartTooltip');
-    var plot = chartBody.querySelector('.chart-plot');
-    if (!tooltip || !plot) return;
-
-    function showTooltip(bar){
-      var date = bar.getAttribute('data-date') || '';
-      var tickets = Number(bar.getAttribute('data-tickets') || 0);
-      var gross = Number(bar.getAttribute('data-gross') || 0);
-      var platform = Number(bar.getAttribute('data-platform') || 0);
-      var organiser = Number(bar.getAttribute('data-organiser') || 0);
-      var kickback = Math.max(0, platform - organiser);
-
-      tooltip.innerHTML =
-        '<div class="tooltip-date">' + fmtDateTime.format(new Date(date)) + '</div>'
-        + '<div class="tooltip-row"><span>Tickets sold</span><strong>' + fmtNumber.format(tickets) + '</strong></div>'
-        + '<div class="tooltip-row"><span>Revenue taken</span><strong>' + formatMoney(gross) + '</strong></div>'
-        + '<div class="tooltip-row"><span>Kickback from booking fee</span><strong>' + formatMoney(organiser) + '</strong></div>';
-
-      var barRect = bar.getBoundingClientRect();
-      var plotRect = plot.getBoundingClientRect();
-      var left = barRect.left - plotRect.left + barRect.width / 2;
-      var top = barRect.top - plotRect.top;
-      var clampLeft = Math.max(90, Math.min(left, plotRect.width - 90));
-
-      tooltip.style.left = clampLeft + 'px';
-      tooltip.style.top = top + 'px';
-      tooltip.classList.add('visible');
-      tooltip.setAttribute('aria-hidden', 'false');
-    }
-
-    function hideTooltip(){
-      tooltip.classList.remove('visible');
-      tooltip.setAttribute('aria-hidden', 'true');
-    }
-
-    var bars = chartBody.querySelectorAll('.chart-bar');
-    bars.forEach(function(bar){
-      bar.addEventListener('mouseenter', function(){
-        bars.forEach(function(other){ other.classList.remove('is-hover'); });
-        bar.classList.add('is-hover');
-        showTooltip(bar);
-      });
-      bar.addEventListener('mouseleave', function(){
-        bar.classList.remove('is-hover');
-        hideTooltip();
-      });
-    });
   }
 
   function renderChartToggles(){
-    var toggles = $('#chartToggles');
-    if (!toggles) return;
-
-    var options = [
-      { key: 'tickets', label: 'Tickets sold' },
-      { key: 'gross', label: 'Gross £' },
-      { key: 'net', label: 'Net £' },
-      { key: 'refunds', label: 'Refund £' }
+    var wrap = $('#chartToggles');
+    if (!wrap) return;
+    var buttons = [
+      { key: 'tickets', label: 'Tickets' },
+      { key: 'orders', label: 'Orders' },
+      { key: 'gross', label: 'Gross' },
+      { key: 'net', label: 'Net' }
     ];
 
-    toggles.innerHTML = options.map(function(opt){
-      var active = opt.key === chartMetric ? ' active' : '';
-      return '<button class="chart-toggle' + active + '" data-metric="' + opt.key + '">' + opt.label + '</button>';
+    wrap.innerHTML = buttons.map(function(b){
+      var active = (chartMetric === b.key) ? ' active' : '';
+      return '<button class="toggle-btn' + active + '" data-metric="' + b.key + '" type="button">' + b.label + '</button>';
     }).join('');
 
-    $$('#chartToggles .chart-toggle').forEach(function(btn){
+    Array.prototype.slice.call(wrap.querySelectorAll('button[data-metric]')).forEach(function(btn){
       btn.addEventListener('click', function(){
-        var metric = btn.getAttribute('data-metric');
-        if (!metric || metric === chartMetric) return;
-        chartMetric = metric;
+        chartMetric = btn.getAttribute('data-metric');
         renderChartToggles();
-        loadTimeseries(metric);
+        loadTimeseries(chartMetric);
       });
     });
   }
 
   async function loadTimeseries(metric){
-    var chartBody = $('#chartBody');
-    if (chartBody) chartBody.innerHTML = '<div class="skeleton skeleton-line" style="height:200px;"></div>';
+    var cacheKey = 'ts:' + (metric || 'tickets');
+    if (timeseriesCache[cacheKey]){
+      renderChart(timeseriesCache[cacheKey], metric);
+      return;
+    }
 
     try{
-      if (!timeseriesCache[metric]){
-        timeseriesCache[metric] = await j('/admin/api/dashboard/timeseries?metric=' + metric + '&days=30');
+      var data = await j('/admin/api/dashboard/timeseries?range=30d&metric=' + encodeURIComponent(metric || 'tickets'));
+      if (data && data.ok){
+        timeseriesCache[cacheKey] = data.series || [];
+        renderChart(timeseriesCache[cacheKey], metric);
+      }else{
+        $('#chartBody').innerHTML = '<div class="empty-state">No chart data.</div>';
       }
-      var data = timeseriesCache[metric];
-      if (!data || !data.ok) throw new Error('Failed to load chart');
-      renderChart(data.series || [], metric);
-    }catch(e){
-      if (chartBody) chartBody.innerHTML = '<div class="error-inline">Chart failed to load.</div>';
+    }catch(err){
+      $('#chartBody').innerHTML = '<div class="error-inline">Chart failed to load.</div>';
     }
   }
 
@@ -7113,10 +7127,9 @@ document.addEventListener('click', function(e){
     }).join('');
   }
 
-  function renderShows(containerId, shows){
-    var body = $('#' + containerId);
+  function renderShows(targetId, shows){
+    var body = $('#' + targetId);
     if (!body) return;
-
     if (!shows || !shows.length){
       body.innerHTML = '<div class="empty-state">No shows in this period yet.</div>';
       return;
@@ -7133,67 +7146,39 @@ document.addEventListener('click', function(e){
         : '';
       return (
         '<div class="table-row">'
-        + '<div><a href="/admin/ui/shows/create?showId=' + show.id + '&mode=edit" data-view="/admin/ui/shows/create?showId=' + show.id + '&mode=edit">' + escapeHtml(show.title) + '</a></div>'
-        + '<div>' + escapeHtml(show.venue || '-') + '</div>'
+        + '<div><a href="' + show.href + '" data-view="' + show.href + '">' + escapeHtml(show.title) + '</a></div>'
+        + '<div>' + escapeHtml(show.venue || '') + '</div>'
         + '<div>' + dateLabel + '</div>'
-        + '<div>' + fmtNumber.format(show.tickets || 0) + '</div>'
-        + '<div>' + formatMoney(show.gross || 0) + '<div>' + capacity + '</div></div>'
+        + '<div>' + fmtNumber.format(show.tickets || 0) + ' ' + capacity + '</div>'
+        + '<div>' + formatMoney(show.grossPence || 0) + '</div>'
         + '</div>'
       );
     }).join('');
 
-    body.innerHTML = '<div class="table-list">' + head + rows + '</div>';
+    body.innerHTML = '<div class="mini-table">' + head + rows + '</div>';
   }
 
   function renderCustomerSnapshot(snapshot){
-    var body = $('#customerBody');
+    var body = $('#snapshotBody');
     if (!body) return;
 
     if (!snapshot){
-      body.innerHTML = '<div class="empty-state">No customer data yet.</div>';
+      body.innerHTML = '<div class="empty-state">No customer snapshot yet.</div>';
       return;
     }
 
-    var topTowns = (snapshot.topTowns || []).map(function(item){
-      return '<div class="badge">' + escapeHtml(item.town) + ' · ' + fmtNumber.format(item.customers) + '</div>';
-    }).join('');
-
-    var topVenues = (snapshot.topVenues || []).map(function(item){
-      return '<div class="badge">' + escapeHtml(item.venue) + ' · ' + fmtNumber.format(item.customers) + '</div>';
-    }).join('');
-
     body.innerHTML =
       '<div class="snapshot-grid">'
-      + '<div class="snapshot-block">'
-      +   '<div class="kpi-label">New vs Returning (7d)</div>'
-      +   '<div class="kpi-value">' + fmtNumber.format(snapshot.last7.newCustomers || 0) + ' / ' + fmtNumber.format(snapshot.last7.returningCustomers || 0) + '</div>'
-      +   '<div class="muted" style="font-size:12px;">New / returning customers</div>'
-      + '</div>'
-      + '<div class="snapshot-block">'
-      +   '<div class="kpi-label">New vs Returning (30d)</div>'
-      +   '<div class="kpi-value">' + fmtNumber.format(snapshot.last30.newCustomers || 0) + ' / ' + fmtNumber.format(snapshot.last30.returningCustomers || 0) + '</div>'
-      +   '<div class="muted" style="font-size:12px;">New / returning customers</div>'
-      + '</div>'
-      + '<div class="snapshot-block">'
-      +   '<div class="kpi-label">Repeat Purchase Rate (90d)</div>'
-      +   '<div class="kpi-value">' + fmtPercent.format(snapshot.repeatRate || 0) + '%</div>'
-      +   '<div class="muted" style="font-size:12px;">Customers with 2+ orders</div>'
-      + '</div>'
-      + '<div class="snapshot-block">'
-      +   '<div class="kpi-label">Lapsed Customers</div>'
-      +   '<div class="kpi-value">' + fmtNumber.format(snapshot.lapsedCount || 0) + '</div>'
-      +   '<div class="muted" style="font-size:12px;">90+ days since last purchase</div>'
-      + '</div>'
+      +   '<div class="snapshot-item"><div class="muted">Views</div><div class="value">' + fmtNumber.format(snapshot.views || 0) + '</div></div>'
+      +   '<div class="snapshot-item"><div class="muted">Checkout starts</div><div class="value">' + fmtNumber.format(snapshot.checkoutStarts || 0) + '</div></div>'
+      +   '<div class="snapshot-item"><div class="muted">Orders</div><div class="value">' + fmtNumber.format(snapshot.orders || 0) + '</div></div>'
+      +   '<div class="snapshot-item"><div class="muted">Conversion</div><div class="value">' + (snapshot.conversionPct !== null && snapshot.conversionPct !== undefined ? (fmtPercent.format(snapshot.conversionPct) + '%') : '—') + '</div></div>'
       + '</div>'
       + '<div class="snapshot-grid" style="margin-top:12px;">'
-      +   '<div class="snapshot-block">'
-      +     '<div class="kpi-label">Top towns</div>'
-      +     (topTowns ? topTowns : '<div class="empty-state">No customer towns yet.</div>')
-      +   '</div>'
-      +   '<div class="snapshot-block">'
-      +     '<div class="kpi-label">Top venues</div>'
-      +     (topVenues ? topVenues : '<div class="empty-state">No customer venues yet.</div>')
-      +   '</div>'
+      +   '<div class="snapshot-item"><div class="muted">Returning</div><div class="value">' + fmtNumber.format(snapshot.returningCustomers || 0) + '</div></div>'
+      +   '<div class="snapshot-item"><div class="muted">New</div><div class="value">' + fmtNumber.format(snapshot.newCustomers || 0) + '</div></div>'
+      +   '<div class="snapshot-item"><div class="muted">AOV</div><div class="value">' + formatMoney(snapshot.aovPence || 0) + '</div></div>'
+      +   '<div class="snapshot-item"><div class="muted">Refund rate</div><div class="value">' + (snapshot.refundRatePct !== null && snapshot.refundRatePct !== undefined ? (fmtPercent.format(snapshot.refundRatePct) + '%') : '—') + '</div></div>'
       + '</div>';
   }
 
@@ -7391,40 +7376,43 @@ document.addEventListener('click', function(e){
 
   function renderAiInsights(insightsData){
     var body = $('#aiInsightsBody');
-    var actionsEl = $('#aiInsightsActions');
-    if (!body || !actionsEl) return;
+    if (!body) return;
 
     if (!insightsData || !insightsData.ok){
-      body.innerHTML = '<div class="error-inline">Insights failed to load.</div>';
-      actionsEl.innerHTML = '';
+      body.innerHTML = '<div class="empty-state">No insights yet.</div>';
       return;
     }
 
-    var insights = insightsData.insights || [];
-    if (!insights.length){
-      body.innerHTML = '<div class="empty-state">No early insights yet. Check back after more sales activity.</div>';
-    }else{
-      body.innerHTML = '<ul class="ai-insights-list">'
-        + insights.map(function(item){
-          return '<li class="ai-insights-item">' + escapeHtml(item.text) + '</li>';
-        }).join('')
-        + '</ul>';
+    if (!insightsData.insights || !insightsData.insights.length){
+      body.innerHTML = '<div class="empty-state">No insights for the next 21 days.</div>';
+      return;
     }
 
-    var actions = insightsData.actions || {};
-    var buttons = Object.keys(actions).map(function(key){
-      var action = actions[key];
-      if (!action || !action.shows || !action.shows.length) return '';
-      return '<button class="btn subtle" data-ai-action="' + key + '">' + escapeHtml(action.label) + '</button>';
-    }).filter(Boolean).join('');
+    body.innerHTML = insightsData.insights.map(function(i){
+      return (
+        '<div class="insight-item">'
+        + '<div class="insight-title">' + escapeHtml(i.title) + '</div>'
+        + '<div class="muted" style="font-size:12px;">' + escapeHtml(i.detail) + '</div>'
+        + '</div>'
+      );
+    }).join('');
 
-    actionsEl.innerHTML = buttons || '<div class="muted" style="font-size:12px;">No quick actions yet.</div>';
+    var actionsEl = $('#aiInsightsActions');
+    if (!actionsEl) return;
 
-    $$('[data-ai-action]').forEach(function(btn){
+    var buttons = (insightsData.actions || []).map(function(action, idx){
+      return '<button class="btn secondary" type="button" data-ai-action="' + idx + '">' + escapeHtml(action.label) + '</button>';
+    }).join('');
+
+    actionsEl.innerHTML = buttons || '<div class="muted" style="font-size:12px;">No suggested actions right now.</div>';
+
+    Array.prototype.slice.call(actionsEl.querySelectorAll('button[data-ai-action]')).forEach(function(btn){
       btn.addEventListener('click', function(){
-        var key = btn.getAttribute('data-ai-action');
-        var action = actions[key];
-        if (action) openShowActionModal({ key: key, label: action.label, shows: action.shows });
+        var idx = Number(btn.getAttribute('data-ai-action'));
+        var action = (insightsData.actions || [])[idx];
+        if (!action) return;
+        showToast('Action queued: ' + action.label, true);
+        console.log('[dashboard][ai-action]', { label: action.label, shows: action.shows });
       });
     });
   }
@@ -7775,48 +7763,42 @@ document.addEventListener('click', function(e){
       dashboardCache.alerts = alerts;
       dashboardCache.insights = insights;
 
-      if (!summary || !summary.ok){
-        $('#kpiGrid').innerHTML = '<div class="error-inline">Summary failed to load.</div>';
-      }else{
+      if (summary && summary.ok){
         renderKpiTiles(summary, kickback);
         if (isWidgetEnabled('customer_behaviour_snapshot')){
           renderCustomerSnapshot(summary.customerSnapshot);
         }
-      }
-
-      if (isWidgetEnabled('top_performing_shows') || isWidgetEnabled('needs_attention')){
-        if (!topShows || !topShows.ok){
-          if (isWidgetEnabled('top_performing_shows')){
-            $('#topShowsBody').innerHTML = '<div class="error-inline">Top shows failed to load.</div>';
-          }
-          if (isWidgetEnabled('needs_attention')){
-            $('#bottomShowsBody').innerHTML = '<div class="error-inline">Shows failed to load.</div>';
-          }
-        }else{
-          if (isWidgetEnabled('top_performing_shows')){
-            renderShows('topShowsBody', topShows.top);
-          }
-          if (isWidgetEnabled('needs_attention')){
-            renderShows('bottomShowsBody', topShows.bottom);
-          }
-        }
-      }
-
-      if (isWidgetEnabled('early_warnings')){
-        if (!alerts || !alerts.ok){
-          $('#alertsBody').innerHTML = '<div class="error-inline">Alerts failed to load.</div>';
-        }else{
-          renderAlerts(alerts);
-        }
-      }
-
-      if (!insights || !insights.ok){
-        renderAiInsights({ ok: false });
       }else{
-        renderAiInsights(insights);
+        var grid = $('#kpiGrid');
+        if (grid) grid.innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
       }
-    }catch(e){
-      $('#kpiGrid').innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
+
+      if (alerts && alerts.ok && isWidgetEnabled('early_warnings')){
+        renderAlerts(alerts);
+      }else{
+        var ab = $('#alertsBody');
+        if (ab) ab.innerHTML = '<div class="empty-state">No alerts.</div>';
+      }
+
+      if (topShows && topShows.ok){
+        if (isWidgetEnabled('top_performing_shows')){
+          renderShows('topShowsBody', topShows.top);
+        }
+        if (isWidgetEnabled('needs_attention')){
+          renderShows('bottomShowsBody', topShows.bottom);
+        }
+      }
+
+      if (insights && insights.ok && isWidgetEnabled('ai_insights')){
+        renderAiInsights(insights);
+      }else{
+        var ib = $('#aiInsightsBody');
+        if (ib) ib.innerHTML = '<div class="empty-state">No insights yet.</div>';
+      }
+    }catch(err){
+      console.error('[dashboard] renderDashboard failed', err);
+      var grid2 = $('#kpiGrid');
+      if (grid2) grid2.innerHTML = '<div class="error-inline">Dashboard failed to load.</div>';
     }
   }
 
@@ -23098,6 +23080,7 @@ function renderInterests(customer){
       setActive(path);
 
       if (path === '/admin/ui' || path === '/admin/ui/home' || path === '/admin/ui/index.html') return home();
+      if (path === '/admin/ui/dashboard') return eventsDashboard();
       if (path === '/admin/ui/shows/create-ai') return createShowAI();
       if (path === '/admin/ui/ai/smart-storefront') return smartStorefront();
       if (path === '/admin/ui/ai/whats-on') return whatsOn();
