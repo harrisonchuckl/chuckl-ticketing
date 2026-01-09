@@ -1204,31 +1204,6 @@ router.get(
   (req, res) => {
     const isOwner = isOwnerEmail(req.user?.email);
     const ownerDebugComment = isOwner ? `<!-- owner-check: email=${req.user?.email}, isOwner=true -->` : "";
-    const ownerConsoleNav = isOwner
-      ? `
-        <div class="sb-section" data-section="owner">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="owner" aria-expanded="false">
-            <span class="sb-link-label">
-              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 3l7 4v5c0 4.4-3 8.6-7 9-4-.4-7-4.6-7-9V7l7-4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span>Owner Console</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="owner">
-            <a class="sb-link sub" href="/admin/ui/owner" data-view="/admin/ui/owner">Owner Console</a>
-            <a class="sb-link sub" href="/admin/ui/owner/insights" data-view="/admin/ui/owner/insights">Insights</a>
-            <a class="sb-link sub" href="/admin/ui/owner/organisers" data-view="/admin/ui/owner/organisers">Organisers</a>
-            <a class="sb-link sub" href="/admin/ui/owner/financial" data-view="/admin/ui/owner/financial">Financial</a>
-            <a class="sb-link sub" href="/admin/ui/owner/health" data-view="/admin/ui/owner/health">Health</a>
-            <a class="sb-link sub" href="/admin/ui/owner/audit" data-view="/admin/ui/owner/audit">Audit log</a>
-          </div>
-        </div>`
-      : "";
 
     res.set("Cache-Control", "no-store");
     res.type("html").send(`<!doctype html>
@@ -1251,7 +1226,7 @@ router.get(
   --sidebar-width:280px;
 
   /* TixAll AI highlight */
-  --ai:#009fe3;
+ --ai:#009fe3;
 }
 
 
@@ -1263,6 +1238,243 @@ router.get(
       font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
       color:var(--text);
       background:var(--bg);
+    }
+    .admin-shell{
+      min-height:100vh;
+      display:grid;
+      grid-template-columns:72px 1fr;
+      grid-template-rows:var(--header-h) 1fr;
+      background:var(--bg);
+    }
+    .admin-topbar{
+      grid-column:1 / -1;
+      position:sticky;
+      top:0;
+      z-index:20;
+      height:var(--header-h);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      padding:0 20px;
+      background:var(--panel);
+      border-bottom:1px solid var(--border);
+    }
+    .topbar-left{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .icon-btn{
+      height:36px;
+      width:36px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#fff;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+    }
+    .icon-btn svg{ width:18px; height:18px; }
+    .topbar-brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      text-decoration:none;
+      color:inherit;
+      font-weight:600;
+    }
+    .topbar-brand img{
+      height:32px;
+      width:auto;
+      display:block;
+    }
+    .topbar-actions{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .dropdown{
+      position:relative;
+    }
+    .dropdown-btn{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      height:36px;
+      padding:0 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:#fff;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .dropdown-btn .dot{
+      height:6px;
+      width:6px;
+      border-radius:999px;
+      background:var(--ai);
+    }
+    .dropdown-menu{
+      position:absolute;
+      top:calc(100% + 8px);
+      right:0;
+      min-width:200px;
+      padding:8px;
+      background:#fff;
+      border:1px solid var(--border);
+      border-radius:12px;
+      box-shadow:0 18px 40px rgba(15,23,42,0.12);
+      display:none;
+      z-index:50;
+    }
+    .dropdown-menu.open{ display:block; }
+    .dropdown-menu a,
+    .dropdown-menu button{
+      width:100%;
+      text-align:left;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 10px;
+      border-radius:10px;
+      border:0;
+      background:transparent;
+      cursor:pointer;
+      color:inherit;
+      text-decoration:none;
+      font-size:14px;
+    }
+    .dropdown-menu a:hover,
+    .dropdown-menu button:hover{
+      background:#f3f4f6;
+    }
+    .dropdown-menu .menu-sep{
+      height:1px;
+      background:var(--border);
+      margin:6px 0;
+    }
+    .admin-sidebar{
+      grid-row:2;
+      grid-column:1;
+      background:#0f172a;
+      color:#e2e8f0;
+      padding:16px 10px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      position:sticky;
+      top:var(--header-h);
+      height:calc(100vh - var(--header-h));
+    }
+    .sidebar-item{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:48px;
+      border-radius:14px;
+      border:1px solid transparent;
+      background:transparent;
+      color:inherit;
+      cursor:pointer;
+      position:relative;
+    }
+    .sidebar-item svg{
+      width:20px;
+      height:20px;
+    }
+    .sidebar-item img{
+      width:22px;
+      height:22px;
+    }
+    .sidebar-item.active{
+      background:rgba(148,163,184,0.18);
+      border-color:rgba(148,163,184,0.3);
+    }
+    .sidebar-item span{
+      position:absolute;
+      left:64px;
+      opacity:0;
+      pointer-events:none;
+      white-space:nowrap;
+      background:#111827;
+      color:#fff;
+      padding:6px 10px;
+      border-radius:10px;
+      font-size:12px;
+      transition:opacity .15s ease;
+    }
+    .sidebar-item:hover span{ opacity:1; }
+    .admin-main{
+      grid-row:2;
+      grid-column:2;
+      padding:24px;
+      overflow:auto;
+    }
+    .page-header{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom:16px;
+    }
+    .page-title{
+      font-size:24px;
+      font-weight:700;
+      margin:0;
+    }
+    .page-subtitle{
+      color:var(--muted);
+      font-size:13px;
+      margin-top:4px;
+    }
+    .page-tabs{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .page-tab{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 14px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:#fff;
+      font-weight:600;
+      font-size:13px;
+      cursor:pointer;
+      color:inherit;
+      text-decoration:none;
+    }
+    .page-tab.active{
+      background:#111827;
+      color:#fff;
+      border-color:#111827;
+    }
+    .content{
+      display:block;
+    }
+    body.sidebar-open .admin-sidebar{
+      transform:translateX(0);
+    }
+    @media (max-width: 980px){
+      .admin-shell{
+        grid-template-columns:1fr;
+        grid-template-rows:var(--header-h) 1fr;
+      }
+      .admin-sidebar{
+        position:fixed;
+        top:var(--header-h);
+        left:0;
+        bottom:0;
+        height:auto;
+        transform:translateX(-110%);
+        transition:transform .2s ease;
+      }
+      .admin-main{
+        grid-column:1;
+      }
     }
    /* Fixed header sits above everything */
 .top-header{
@@ -3566,216 +3778,69 @@ router.get(
 </head>
 <body>
   ${ownerDebugComment}
-  <header class="top-header">
-    <a class="hdr-brand" href="/admin/ui/home" data-view="/admin/ui/home">
-      <!-- NOTE: spaces must be URL-encoded -->
-      <img
-  class="hdr-logo"
-  src="/admin/ui/brand-logo"
-  alt="TixAll"
-/>
-
-    </a>
-
-    <div class="hdr-right">
-      <button class="hdr-menu-toggle" id="hdrMenuToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="adminSidebar">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M4 6h16M4 12h16M4 18h16" stroke="#111827" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-      </button>
-      <a class="btn p hdr-create-show" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
-      <div class="hdr-account" id="hdrAccount">
-        <button class="hdr-account-btn" id="hdrAccountBtn" aria-haspopup="menu" aria-expanded="false" title="Account">
-          <!-- Simple person icon (inline SVG) -->
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.51 4.51 0 0 0 12 12Z" stroke="#111827" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M4 20.2c1.7-4.1 5.1-6.2 8-6.2s6.3 2.1 8 6.2" stroke="#111827" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <div class="admin-shell">
+    <header class="admin-topbar">
+      <div class="topbar-left">
+        <button class="icon-btn" id="sidebarToggle" type="button" aria-label="Toggle sidebar" aria-expanded="false" aria-controls="adminSidebar">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
         </button>
-
-        <div class="hdr-account-menu" id="hdrAccountMenu" role="menu" aria-label="Account menu">
-          <a class="hdr-menu-item" href="/admin/ui/account" data-view="/admin/ui/account" role="menuitem">Account</a>
-          <a class="hdr-menu-item" href="/admin/ui/finance" data-view="/admin/ui/finance" role="menuitem">Finance</a>
-          <div class="hdr-menu-sep"></div>
-          <a class="hdr-menu-item" href="/admin/ui/logout" role="menuitem">Log out</a>
+        <a class="topbar-brand" href="/admin/ui/home" data-view="/admin/ui/home">
+          <img src="/admin/ui/brand-logo" alt="TixAll" />
+          <span>Admin Console</span>
+        </a>
+      </div>
+      <div class="topbar-actions">
+        <div class="dropdown" id="createMenu">
+          <button class="dropdown-btn" id="createMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false">
+            <span class="dot"></span>
+            Create
+          </button>
+          <div class="dropdown-menu" id="createMenuList" role="menu" aria-label="Create menu">
+            <a href="/admin/ui/shows/create" data-view="/admin/ui/shows/create" role="menuitem">Create Show</a>
+            <a href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai" role="menuitem">Create Show using AI</a>
+            <a href="/admin/ui/product-store/create" data-view="/admin/ui/product-store/create" role="menuitem">Create Product</a>
+          </div>
+        </div>
+        <div class="dropdown" id="userMenu">
+          <button class="dropdown-btn" id="userMenuBtn" type="button" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.51 4.51 0 0 0 12 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 20.2c1.7-4.1 5.1-6.2 8-6.2s6.3 2.1 8 6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Account
+          </button>
+          <div class="dropdown-menu" id="userMenuList" role="menu" aria-label="User menu">
+            <a href="/admin/ui/account" data-view="/admin/ui/account" role="menuitem">Account</a>
+            <a href="/admin/ui/notifications" data-view="/admin/ui/notifications" role="menuitem">Notifications</a>
+            <a href="/admin/ui/finance" data-view="/admin/ui/finance" role="menuitem">Finance</a>
+            <div class="menu-sep"></div>
+            <a href="/admin/ui/logout" role="menuitem">Log out</a>
+          </div>
         </div>
       </div>
-    </div>
-  </header>
-  <div id="adminToast" class="toast" role="status" aria-live="polite"></div>
-
-  <div class="wrap">
-    <aside class="sidebar" id="adminSidebar">
-      <div class="sb-brand">
-        <img src="/admin/ui/brand-logo" alt="TixAll" />
+    </header>
+    <aside class="admin-sidebar" id="adminSidebar" aria-label="Primary navigation"></aside>
+    <main class="admin-main">
+      <section class="page-header">
+        <div>
+          <h1 class="page-title" id="pageTitle">Loading…</h1>
+          <div class="page-subtitle" id="pageSubtitle"></div>
+        </div>
+        <div class="page-tabs" id="pageTabs"></div>
+      </section>
+      <div class="content" id="main">
+        <div class="card"><div class="title">Loading…</div></div>
       </div>
-      <nav class="sb-nav" aria-label="Primary">
-        <div class="sb-section" data-section="events">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="events" aria-expanded="false">
-            <span class="sb-link-label">
-              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <path d="M9 8v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              </svg>
-              <span>Events</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="events">
-            <a class="sb-link sub" href="/admin/ui/dashboard" data-view="/admin/ui/dashboard">Dashboard</a>
-            <a class="sb-link sub" href="/admin/ui/home" data-view="/admin/ui/home">Home</a>
-            <a class="sb-link sub" href="/admin/ui/shows/create" data-view="/admin/ui/shows/create">Create Show</a>
-            <a class="sb-link sub" href="/admin/ui/shows/current" data-view="/admin/ui/shows/current">All Events</a>
-          </div>
-        </div>
-
-        <div class="sb-section" data-section="products">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="products" aria-expanded="false">
-            <span class="sb-link-label">
-              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M6 7h12l1.2 4.5a2 2 0 0 1-1.94 2.5H6.74a2 2 0 0 1-1.94-2.5L6 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <path d="M6 7l-1-3h14l-1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M8 21h8a2 2 0 0 0 2-2v-5H6v5a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-              </svg>
-              <span>Products</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="products">
-            <a class="sb-link sub" href="/admin/ui/product-store/create" data-view="/admin/ui/product-store/create">Create Product</a>
-            <a class="sb-link sub" href="/admin/ui/product-store" data-view="/admin/ui/product-store">Product Store</a>
-            <a class="sb-link sub" href="/admin/ui/product-store/orders" data-view="/admin/ui/product-store/orders">Orders</a>
-            <a class="sb-link sub" href="/admin/ui/product-store/settings" data-view="/admin/ui/product-store/settings">Settings</a>
-            <a class="sb-link sub" href="/admin/ui/product-store/upsells" data-view="/admin/ui/product-store/upsells">Upsells</a>
-            <a class="sb-link sub" href="/admin/ui/integrations/printful" data-view="/admin/ui/integrations/printful">Printful Integration</a>
-            <a class="sb-link sub" href="/admin/ui/integrations/printful-pricing" data-view="/admin/ui/integrations/printful-pricing">Printful Pricing</a>
-            <a class="sb-link sub" href="/admin/ui/integrations/printful-reconciliation" data-view="/admin/ui/integrations/printful-reconciliation">Printful Reconciliation</a>
-          </div>
-        </div>
-
-        <div class="sb-section" data-section="venues">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="venues" aria-expanded="false">
-            <span class="sb-link-label">
-              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 20h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                <path d="M6 20V9a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v11" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <path d="M9 12h2M13 12h2M9 15h2M13 15h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              </svg>
-              <span>Venues</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="venues">
-            <a class="sb-link sub" href="/admin/ui/venues" data-view="/admin/ui/venues">Venues</a>
-          </div>
-        </div>
-
-        <div class="sb-section" data-section="artists">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="artists" aria-expanded="false">
-            <span class="sb-link-label">
-              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M8.5 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 8.5 11Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M18 10a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M2 20c.8-3 3.5-5 6.5-5s5.7 2 6.5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M13 19.5c.3-1.8 1.6-3.4 3.5-4.1 1.9-.6 4 .1 5.1 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span>Artists &amp; Promoters</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="artists">
-            <a class="sb-link sub" href="/admin/ui/promoters" data-view="/admin/ui/promoters">Promoters</a>
-          </div>
-        </div>
-
-        <div class="sb-section" data-section="customers">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="customers" aria-expanded="false">
-            <span class="sb-link-label">
-              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M3 12v4a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                <path d="M3 12l8-4 10 5-10 5-5-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M14.5 7.5 17 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              </svg>
-              <span>Customers &amp; Marketing</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="customers">
-            <a class="sb-link sub" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>
-            <a class="sb-link sub" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing Overview</a>
-            <a class="sb-link sub" href="/admin/ui/imports-exports" data-view="/admin/ui/imports-exports">Imports &amp; Exports</a>
-            <a class="sb-link sub" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>
-            <a class="sb-link sub" href="/admin/ui/email-templates" data-view="/admin/ui/email-templates">Email Templates</a>
-            <a class="sb-link sub" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>
-          </div>
-        </div>
-
-        <div class="sb-section" data-section="store">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="store" aria-expanded="false">
-            <span class="sb-link-label">
-              <svg class="sb-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 7h16l-1.5 6H5.5L4 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-                <path d="M7 7l1-3h8l1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-              </svg>
-              <span>My Store</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="store">
-            <a class="sb-link sub" href="/admin/ui/storefront" data-view="/admin/ui/storefront">Storefront</a>
-            <a class="sb-link sub" href="/admin/ui/orders" data-view="/admin/ui/orders">Orders</a>
-            <a class="sb-link sub" href="/admin/ui/account" data-view="/admin/ui/account">Account</a>
-            <a class="sb-link sub" href="/admin/ui/finance" data-view="/admin/ui/finance">Finance</a>
-            <a class="sb-link sub" href="/admin/ui/logout">Log out</a>
-          </div>
-        </div>
-
-        <div class="sb-section" data-section="tixel-ai">
-          <button class="sb-link sb-btn-link sb-link-row" type="button" data-toggle="tixel-ai" aria-expanded="false">
-            <span class="sb-link-label">
-              <img src="/tixai.png" alt="TixAll AI" class="ai-menu-logo ai-menu-logo-main" />
-              <span>TixAll AI</span>
-            </span>
-            <svg class="sb-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="sb-submenu" data-submenu="tixel-ai">
-            <a class="sb-link sub" href="/admin/ui/shows/create-ai" data-view="/admin/ui/shows/create-ai">Create Show</a>
-            <a class="sb-link sub" href="/admin/ui/ai/featured" data-view="/admin/ui/ai/featured">Featured &amp; Discovery</a>
-            <a class="sb-link sub" href="/admin/ui/ai/insights" data-view="/admin/ui/ai/insights">AI Insights</a>
-            <a class="sb-link sub" href="/admin/ui/ai/marketing-studio" data-view="/admin/ui/ai/marketing-studio">Marketing Studio</a>
-            <a class="sb-link sub" href="/admin/ui/ai/audience" data-view="/admin/ui/ai/audience">Audience &amp; CRM</a>
-            <a class="sb-link sub" href="/admin/ui/ai/store" data-view="/admin/ui/ai/store">Store &amp; Add-ons</a>
-            <a class="sb-link sub" href="/admin/ui/ai/support" data-view="/admin/ui/ai/support">Support Inbox</a>
-          </div>
-        </div>
-        ${ownerConsoleNav}
-      </nav>
-    </aside>
-
-    <main class="content" id="main">
-      <div class="card"><div class="title">Loading…</div></div>
     </main>
   </div>
+  <div id="adminToast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
 (function(){
   console.log('[Admin UI] booting');
-  var menuToggle = document.getElementById('hdrMenuToggle');
+  var menuToggle = document.getElementById('sidebarToggle');
   var sidebar = document.getElementById('adminSidebar');
   if (menuToggle && sidebar) {
     menuToggle.addEventListener('click', function(){
@@ -3785,7 +3850,7 @@ router.get(
 
     sidebar.addEventListener('click', function(event){
       if (window.innerWidth > 960) return;
-      if (event.target && event.target.closest && event.target.closest('a')) {
+      if (event.target && event.target.closest && event.target.closest('[data-view]')) {
         document.body.classList.remove('sidebar-open');
         menuToggle.setAttribute('aria-expanded', 'false');
       }
@@ -3889,73 +3954,273 @@ router.get(
     });
   }
 
-
   var main = $('#main');
+  var pageTitle = $('#pageTitle');
+  var pageSubtitle = $('#pageSubtitle');
+  var pageTabs = $('#pageTabs');
+  var sidebarEl = $('#adminSidebar');
+  var isOwner = ${JSON.stringify(isOwner)};
 
-  // --- Fixed header: account dropdown ---
-(function initHeader(){
-  var btn = $('#hdrAccountBtn');
-  var menu = $('#hdrAccountMenu');
-  var wrap = $('#hdrAccount');
-
-  if (!btn || !menu || !wrap) return;
-
-  function close(){
-    menu.classList.remove('open');
-    btn.setAttribute('aria-expanded', 'false');
-  }
-  function toggle(){
-    var isOpen = menu.classList.contains('open');
-    if (isOpen) close();
-    else{
+  function initDropdown(btn, menu){
+    if (!btn || !menu) return { close: function(){} };
+    function close(){
+      menu.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+    function open(){
       menu.classList.add('open');
       btn.setAttribute('aria-expanded', 'true');
     }
-  }
-
-  btn.addEventListener('click', function(e){
-    e.preventDefault();
-    e.stopPropagation();
-    toggle();
-  });
-
-  document.addEventListener('click', function(e){
-    if (!wrap.contains(e.target)) close();
-  });
-
-  document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape') close();
-  });
-})();
-
-
-  function initSidebarToggles(){
-    $$('.sb-section [data-toggle]').forEach(function(btn){
-      btn.addEventListener('click', function(e){
-        e.preventDefault();
-        var section = btn.closest('.sb-section');
-        if (!section) return;
-        var isOpen = section.classList.toggle('open');
-        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      });
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      if (menu.classList.contains('open')) close();
+      else open();
     });
+    document.addEventListener('click', function(e){
+      if (!menu.contains(e.target) && !btn.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') close();
+    });
+    return { close: close };
   }
-  initSidebarToggles();
+
+  var createMenu = initDropdown($('#createMenuBtn'), $('#createMenuList'));
+  var userMenu = initDropdown($('#userMenuBtn'), $('#userMenuList'));
+
+
+  var NAV = {
+    overview: {
+      title: 'Overview',
+      subtitle: 'Quick links into the admin console',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12l8-7 8 7v7a2 2 0 0 1-2 2h-4v-6H10v6H6a2 2 0 0 1-2-2v-7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+      tabs: [
+        { key: 'home', label: 'Home', path: '/admin/ui/home', mount: home }
+      ]
+    },
+    events: {
+      title: 'Events',
+      subtitle: 'Dashboard, creation, and show management',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 8v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+      tabs: [
+        { key: 'dashboard', label: 'Dashboard', path: '/admin/ui/dashboard', mount: eventsDashboard },
+        { key: 'create', label: 'Create Show', path: '/admin/ui/shows/create', mount: createShow },
+        { key: 'all', label: 'All Events', path: '/admin/ui/shows/current', mount: listShows }
+      ]
+    },
+    products: {
+      title: 'Products',
+      subtitle: 'Merchandise and add-on sales',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 7h12l1.2 4.5a2 2 0 0 1-1.94 2.5H6.74a2 2 0 0 1-1.94-2.5L6 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M6 7l-1-3h14l-1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8 21h8a2 2 0 0 0 2-2v-5H6v5a2 2 0 0 0 2 2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+      tabs: [
+        { key: 'create', label: 'Create Product', path: '/admin/ui/product-store/create', mount: productStoreCreatePage },
+        { key: 'store', label: 'Product Store', path: '/admin/ui/product-store', mount: productStorePage },
+        { key: 'orders', label: 'Orders', path: '/admin/ui/product-store/orders', mount: productStoreOrdersPage },
+        { key: 'settings', label: 'Settings', path: '/admin/ui/product-store/settings', mount: productStoreSettingsPage },
+        { key: 'upsells', label: 'Upsells', path: '/admin/ui/product-store/upsells', mount: productStoreUpsellsPage },
+        { key: 'printful', label: 'Printful Integration', path: '/admin/ui/integrations/printful', mount: printfulIntegrationPage },
+        { key: 'printful-pricing', label: 'Printful Pricing', path: '/admin/ui/integrations/printful-pricing', mount: printfulPricingPage },
+        { key: 'printful-recon', label: 'Printful Reconciliation', path: '/admin/ui/integrations/printful-reconciliation', mount: printfulReconciliationPage }
+      ]
+    },
+    venues: {
+      title: 'Venues',
+      subtitle: 'Venue setup and details',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M6 20V9a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v11" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 12h2M13 12h2M9 15h2M13 15h2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+      tabs: [
+        { key: 'venues', label: 'Venues', path: '/admin/ui/venues', mount: venues }
+      ]
+    },
+    promoters: {
+      title: 'Promoters',
+      subtitle: 'Artist and promoter relationships',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.5 11a3.5 3.5 0 1 0-3.5-3.5A3.5 3.5 0 0 0 8.5 11Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 10a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 20c.8-3 3.5-5 6.5-5s5.7 2 6.5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 19.5c.3-1.8 1.6-3.4 3.5-4.1 1.9-.6 4 .1 5.1 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      tabs: [
+        { key: 'list', label: 'Promoters', path: '/admin/ui/promoters', mount: promotersList },
+        { key: 'new', label: 'New Promoter', path: '/admin/ui/promoters/new', mount: promoterCreate }
+      ]
+    },
+    customers: {
+      title: 'Customers & Marketing',
+      subtitle: 'Audience, campaigns, and analytics',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12v4a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3 12l8-4 10 5-10 5-5-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 7.5 17 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+      tabs: [
+        { key: 'customers', label: 'Customers', path: '/admin/ui/customers', mount: customers },
+        { key: 'marketing', label: 'Marketing', path: '/admin/ui/marketing', mount: marketingPage },
+        { key: 'imports', label: 'Imports & Exports', path: '/admin/ui/imports-exports', mount: importsExports },
+        { key: 'email', label: 'Email Campaigns', path: '/admin/ui/email', mount: emailPage },
+        { key: 'templates', label: 'Email Templates', path: '/admin/ui/email-templates', mount: emailTemplatesListPage },
+        { key: 'analytics', label: 'Insights', path: '/admin/ui/analytics', mount: analytics }
+      ]
+    },
+    store: {
+      title: 'Storefront & Orders',
+      subtitle: 'Your public storefront and order management',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16l-1.5 6H5.5L4 7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 7l1-3h8l1 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+      tabs: [
+        { key: 'storefront', label: 'Storefront', path: '/admin/ui/storefront', mount: storefrontPage },
+        { key: 'orders', label: 'Orders', path: '/admin/ui/orders', mount: orders }
+      ]
+    },
+    account: {
+      title: 'Account',
+      subtitle: 'Profile, notifications, and billing',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.51 4.51 0 0 0 12 12Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20.2c1.7-4.1 5.1-6.2 8-6.2s6.3 2.1 8 6.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      tabs: [
+        { key: 'account', label: 'Account', path: '/admin/ui/account', mount: account },
+        { key: 'notifications', label: 'Notifications', path: '/admin/ui/notifications', mount: notifications },
+        { key: 'finance', label: 'Finance', path: '/admin/ui/finance', mount: finance }
+      ]
+    },
+    ai: {
+      title: 'TixAll AI',
+      subtitle: 'Automation and insights powered by AI',
+      icon: '<img src="/tixai.png" alt="TixAll AI" style="width:22px;height:22px;" />',
+      tabs: [
+        { key: 'create-ai', label: 'Create Show', path: '/admin/ui/shows/create-ai', mount: createShowAI },
+        { key: 'featured', label: 'Featured & Discovery', path: '/admin/ui/ai/featured', mount: aiFeaturedPage },
+        { key: 'insights', label: 'AI Insights', path: '/admin/ui/ai/insights', mount: aiInsightsPage },
+        { key: 'marketing', label: 'Marketing Studio', path: '/admin/ui/ai/marketing-studio', mount: aiMarketingStudioPage },
+        { key: 'audience', label: 'Audience & CRM', path: '/admin/ui/ai/audience', mount: aiAudiencePage },
+        { key: 'store', label: 'Store & Add-ons', path: '/admin/ui/ai/store', mount: aiStorePage },
+        { key: 'support', label: 'Support Inbox', path: '/admin/ui/ai/support', mount: aiSupportPage }
+      ]
+    }
+  };
+
+  if (isOwner){
+    NAV.owner = {
+      title: 'Owner Console',
+      subtitle: 'Organisation-wide insights and health',
+      icon:
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l7 4v5c0 4.4-3 8.6-7 9-4-.4-7-4.6-7-9V7l7-4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      tabs: [
+        { key: 'overview', label: 'Owner Console', path: '/admin/ui/owner', mount: ownerConsoleOverviewPage },
+        { key: 'insights', label: 'Insights', path: '/admin/ui/owner/insights', mount: function(){ return ownerConsolePage('insights'); } },
+        { key: 'organisers', label: 'Organisers', path: '/admin/ui/owner/organisers', mount: function(){ return ownerConsolePage('organisers'); } },
+        { key: 'financial', label: 'Financial', path: '/admin/ui/owner/financial', mount: function(){ return ownerConsolePage('financial'); } },
+        { key: 'health', label: 'Health', path: '/admin/ui/owner/health', mount: function(){ return ownerConsolePage('health'); } },
+        { key: 'audit', label: 'Audit log', path: '/admin/ui/owner/audit', mount: function(){ return ownerConsolePage('audit'); } }
+      ]
+    };
+  }
+
+  var NAV_ORDER = Object.keys(NAV);
+
+  function normalizePath(path){
+    if (path === '/admin/ui' || path === '/admin/ui/index.html') return '/admin/ui/home';
+    return path;
+  }
+
+  function findNavState(path){
+    var normalized = normalizePath(path);
+    var sectionKey = null;
+    var tabKey = null;
+    Object.keys(NAV).some(function(key){
+      var section = NAV[key];
+      var tab = section.tabs.find(function(item){ return item.path === normalized; });
+      if (tab){
+        sectionKey = key;
+        tabKey = tab.key;
+        return true;
+      }
+      return false;
+    });
+
+    if (!sectionKey){
+      if (normalized.startsWith('/admin/ui/shows/')) {
+        sectionKey = 'events';
+        tabKey = 'all';
+      } else if (normalized.startsWith('/admin/ui/promoters/')) {
+        sectionKey = 'promoters';
+        tabKey = 'list';
+      } else if (normalized.startsWith('/admin/ui/product-store/products/')) {
+        sectionKey = 'products';
+        tabKey = 'store';
+      } else if (normalized.startsWith('/admin/ui/product-store/orders/')) {
+        sectionKey = 'products';
+        tabKey = 'orders';
+      } else if (normalized.startsWith('/admin/ui/email-templates/')) {
+        sectionKey = 'customers';
+        tabKey = 'templates';
+      } else if (normalized.startsWith('/admin/ui/campaign-drafts/')) {
+        sectionKey = 'customers';
+        tabKey = 'marketing';
+      } else if (normalized.startsWith('/admin/ui/ai/')) {
+        sectionKey = 'ai';
+        tabKey = 'featured';
+      } else if (normalized.startsWith('/admin/ui/owner')) {
+        sectionKey = 'owner';
+        tabKey = 'overview';
+      }
+    }
+
+    if (!sectionKey){
+      sectionKey = 'overview';
+      tabKey = 'home';
+    }
+
+    return { sectionKey: sectionKey, tabKey: tabKey, path: normalized };
+  }
+
+  function renderSidebar(){
+    if (!sidebarEl) return;
+    sidebarEl.innerHTML = NAV_ORDER.map(function(key){
+      var section = NAV[key];
+      if (!section) return '';
+      return ''
+        + '<button class="sidebar-item" type="button" data-section="' + key + '" aria-label="' + escapeHtml(section.title) + '">'
+        +   section.icon
+        +   '<span>' + escapeHtml(section.title) + '</span>'
+        + '</button>';
+    }).join('');
+  }
+
+  function renderTabs(state){
+    if (!pageTabs || !pageTitle) return;
+    var section = NAV[state.sectionKey];
+    if (!section){
+      pageTitle.textContent = 'Admin';
+      if (pageSubtitle) pageSubtitle.textContent = '';
+      pageTabs.innerHTML = '';
+      return;
+    }
+    pageTitle.textContent = section.title;
+    if (pageSubtitle) pageSubtitle.textContent = section.subtitle || '';
+    pageTabs.innerHTML = section.tabs.map(function(tab){
+      var active = tab.key === state.tabKey ? ' active' : '';
+      return '<a class="page-tab' + active + '" href="' + tab.path + '" data-view="' + tab.path + '">' + escapeHtml(tab.label) + '</a>';
+    }).join('');
+  }
 
   function setActive(path){
-    var normalized = (path === '/admin/ui' || path === '/admin/ui/index.html') ? '/admin/ui/home' : path;
-    $$('.sb-link').forEach(function(a){
-      a.classList.toggle('active', a.getAttribute('data-view') === normalized);
+    var state = findNavState(path);
+    renderTabs(state);
+    $$('.sidebar-item').forEach(function(item){
+      item.classList.toggle('active', item.getAttribute('data-section') === state.sectionKey);
     });
-    $$('.sb-section').forEach(function(section){
-      var toggle = section.querySelector('[data-toggle]');
-      var hasActive = section.querySelector('.sb-link.active');
-      if (hasActive){
-        section.classList.add('open');
-        if (toggle){
-          toggle.setAttribute('aria-expanded', 'true');
-        }
-      }
+    return state;
+  }
+
+  renderSidebar();
+
+  if (sidebarEl){
+    sidebarEl.addEventListener('click', function(e){
+      var btn = e.target.closest('.sidebar-item');
+      if (!btn) return;
+      var key = btn.getAttribute('data-section');
+      var section = NAV[key];
+      if (!section || !section.tabs.length) return;
+      go(section.tabs[0].path);
     });
   }
 
@@ -4744,6 +5009,10 @@ router.get(
 
   function go(path){
     history.pushState(null, '', path);
+    if (document.body.classList.contains('sidebar-open')){
+      document.body.classList.remove('sidebar-open');
+      if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
+    }
     route();
   }
 
@@ -4752,12 +5021,14 @@ document.addEventListener('click', function(e){
   var tgt = e.target;
   if (!tgt || !tgt.closest) return;
 
-  var a = tgt.closest('a[data-view]');
-  if (a){
-    var view = a.getAttribute('data-view');
+  var link = tgt.closest('[data-view]');
+  if (link){
+    var view = link.getAttribute('data-view');
     if (view){
-      e.preventDefault();
+      if (link.tagName === 'A') e.preventDefault();
       go(view);
+      if (createMenu) createMenu.close();
+      if (userMenu) userMenu.close();
     }
   }
 });
@@ -21656,6 +21927,20 @@ function renderInterests(customer){
     loadTemplate();
     setPreviewMode('desktop');
   }
+  function notifications(){
+  if (!main) return;
+  main.innerHTML =
+    '<div class="card">'
+      +'<div class="header">'
+        +'<div>'
+          +'<div class="title">Notifications</div>'
+          +'<div class="muted">Alerts and updates will appear here once wired.</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="muted">Not wired yet.</div>'
+    +'</div>';
+}
+
   function finance(){
   if (!main) return;
   main.innerHTML =
@@ -23127,6 +23412,7 @@ function renderInterests(customer){
       }
       if (path === '/admin/ui/product-store/products/new') return productStoreProductForm();
       if (path === '/admin/ui/account')        return account();
+      if (path === '/admin/ui/notifications')  return notifications();
       if (path === '/admin/ui/finance')        return finance();
 
 
