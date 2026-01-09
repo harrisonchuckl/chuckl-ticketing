@@ -59,6 +59,15 @@ function normalizeEnumValue<T extends string>(value: any, allowed: Set<string>, 
   return (allowed.has(normalized) ? normalized : fallback) as T;
 }
 
+function isProductStatus(value: string): value is ProductStatus {
+  return productStatusValues.has(value as ProductStatus);
+}
+
+function isProductCategory(value: string): value is ProductCategory {
+  return productCategoryValues.has(value as ProductCategory);
+}
+
+
 function createErrorId() {
   return randomUUID().split("-")[0];
 }
@@ -370,9 +379,9 @@ router.get("/product-store/products", requireAdminOrOrganiser, async (req, res) 
     const category = categoryRaw ? categoryRaw.toUpperCase() : "";
     const q = qRaw || searchRaw;
 
-    if (status && !productStatusValues.has(status)) queryErrors.push("status");
-    if (category && !productCategoryValues.has(category)) queryErrors.push("category");
-
+    if (status && !isProductStatus(status)) queryErrors.push("status");
+    if (category && !isProductCategory(category)) queryErrors.push("category");
+    
     const limitRaw = parseIntOrNull(req.query.limit);
     const offsetRaw = parseIntOrNull(req.query.offset);
     const maxLimit = 100;
