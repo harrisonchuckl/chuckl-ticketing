@@ -13,6 +13,7 @@
     body {
       box-sizing: border-box;
     }
+
     
     * {
       font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
