@@ -4558,8 +4558,8 @@ router.get(
       if (pageHeader) pageHeader.classList.remove('is-hidden');
       return;
     }
- if (pageHeader) pageHeader.classList.toggle('is-hidden', state.sectionKey === 'overview' || state.sectionKey === 'products');
-    if (state.sectionKey === 'products'){
+ if (pageHeader) pageHeader.classList.toggle('is-hidden', state.sectionKey === 'overview' || state.sectionKey === 'products' || state.sectionKey === 'customers');
+if (state.sectionKey === 'products'){
       pageTitle.textContent = '';
       if (pageSubtitle) pageSubtitle.textContent = '';
       pageTabs.innerHTML = '';
