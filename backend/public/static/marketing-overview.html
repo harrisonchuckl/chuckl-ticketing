@@ -1,0 +1,165 @@
+<style>
+.marketing-overview {
+      box-sizing: border-box;
+    }.marketing-overview * {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+    }.marketing-overview .cta-button {
+      transition: all 0.3s ease;
+    }.marketing-overview .cta-button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 10px 30px rgba(168, 85, 247, 0.5);
+    }.marketing-overview .gradient-text {
+      background: linear-gradient(135deg, #db2777 0%, #a855f7 50%, #7c3aed 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }.marketing-overview .nav-tab {
+      transition: all 0.3s ease;
+    }.marketing-overview .nav-tab:hover {
+      background: rgba(255, 255, 255, 0.95);
+      color: #667eea;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+      border-color: rgba(255, 255, 255, 0.95);
+    }.marketing-overview .nav-tab:active {
+      transform: translateY(0px);
+    }.marketing-overview .nav-tab.active {
+      background: rgba(255, 255, 255, 0.95);
+      color: #667eea;
+      border-color: rgba(255, 255, 255, 0.95);
+    }.marketing-overview .feature-card {
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }.marketing-overview .feature-card:hover {
+      transform: translateY(-12px) scale(1.02);
+    }
+    
+    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }.marketing-overview .float-animation {
+      animation: float 6s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 20px rgba(236, 72, 153, 0.3); } 50% { box-shadow: 0 0 40px rgba(236, 72, 153, 0.6); } }.marketing-overview /* Customer page specific styles */
+    .marketing-overview .loyalty {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }.marketing-overview .loyalty.gold { background: #fef3c7; color: #92400e; }.marketing-overview .loyalty.silver { background: #f3f4f6; color: #374151; }.marketing-overview .loyalty.bronze { background: #fed7aa; color: #9a3412; }.marketing-overview .loyalty.vip { background: #ddd6fe; color: #5b21b6; }.marketing-overview .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }.marketing-overview .status-badge.paid { background: #d1fae5; color: #065f46; }.marketing-overview .status-badge.refunded { background: #fee2e2; color: #991b1b; }.marketing-overview .status-badge.cancelled { background: #f3f4f6; color: #374151; }.marketing-overview .tag {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #e0e7ff;
+      color: #3730a3;
+    }.marketing-overview .kebab {
+      position: relative;
+    }.marketing-overview .kebab .menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 100%;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      min-width: 160px;
+      z-index: 100;
+      margin-top: 4px;
+    }.marketing-overview .kebab .menu.open {
+      display: block;
+    }.marketing-overview .kebab .menu a {
+      display: block;
+      padding: 10px 14px;
+      color: #2d3748;
+      text-decoration: none;
+      font-size: 14px;
+      transition: background 0.2s ease;
+    }.marketing-overview .kebab .menu a:hover {
+      background: #f7fafc;
+    }.marketing-overview .kebab .menu a:first-child {
+      border-radius: 8px 8px 0 0;
+    }.marketing-overview .kebab .menu a:last-child {
+      border-radius: 0 0 8px 8px;
+    }.marketing-overview .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }.marketing-overview .mini-card {
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+    }.marketing-overview .drawer-section {
+      margin-bottom: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #e2e8f0;
+    }.marketing-overview .drawer-section:last-child {
+      border-bottom: none;
+    }.marketing-overview .drawer-section .title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2d3748;
+      margin-bottom: 12px;
+    }.marketing-overview #customerDrawerOverlay.open {
+      display: block !important;
+    }.marketing-overview #customerDrawer.open {
+      right: 0 !important;
+    }.marketing-overview .btn {
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #4a5568;
+      cursor: pointer;
+      font-family: 'Outfit', sans-serif;
+      transition: all 0.2s ease;
+    }.marketing-overview .btn:hover {
+      background: #edf2f7;
+      border-color: #cbd5e0;
+    }.marketing-overview .btn.p {
+      background: #a855f7;
+      color: white;
+      border-color: #a855f7;
+    }.marketing-overview .btn.p:hover {
+      background: #9333ea;
+      border-color: #9333ea;
+    }.marketing-overview .date-filter-option:hover {
+      background: #f7fafc !important;
+      border-color: #cbd5e0 !important;
+    }.marketing-overview #applyCustomDate:hover {
+      background: #9333ea;
+    }.marketing-overview #clearDateFilter:hover {
+      background: #edf2f7;
+      border-color: #cbd5e0;
+    }.marketing-overview [data-sort] svg {
+      transition: transform 0.3s ease;
+    }
+  
+</style>
+<div class="marketing-overview">
+
+  <div class="w-full" style="padding: 60px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100%;"><!-- Header Section -->
+   <div style="text-align: center; margin-bottom: 60px;">
+    <h1 id="main-title" style="font-size: clamp(32px, 5vw, 72px); font-weight: 800; margin: 0; color: #ffffff; line-height: 1.1; transition: opacity 0.4s ease; min-height: 160px; display: flex; align-items: center; justify-content: center; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);">Intelligent Marketing and Powerful Automations</h1><!-- Navigation Tabs -->
+    <div style="display: flex; justify-content: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;"><a class="nav-tab" href="/admin/ui/customers" data-view="/admin/ui/customers" style="background: rgba(255, 255, 255, 0.25); color: #ffffff; font-size: 16px; font-weight: 600; padding: 12px 28px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.3s ease; backdrop-filter: blur(10px);"> Customers </a> <a class="nav-tab" href="/admin/ui/email" data-view="/admin/ui/email" style="background: rgba(255, 255, 255, 0.25); color: #ffffff; font-size: 16px; font-weight: 600; padding: 12px 28px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.3s ease; backdrop-filter: blur(10px);"> Email Campaigns </a> <a class="nav-tab" href="/admin/ui/marketing" data-view="/admin/ui/marketing" style="background: rgba(255, 255, 255, 0.25); color: #ffffff; font-size: 16px; font-weight: 600; padding: 12px 28px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.3s ease; backdrop-filter: blur(10px);"> Social Media Campaigns </a> <a class="nav-tab" href="/admin/ui/imports-exports" data-view="/admin/ui/imports-exports" style="background: rgba(255, 255, 255, 0.25); color: #ffffff; font-size: 16px; font-weight: 600; padding: 12px 28px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.3s ease; backdrop-filter: blur(10px);"> Imports &amp; Exports </a> <a class="nav-tab" href="/admin/ui/customers/add" data-view="/admin/ui/customers/add" style="background: rgba(255, 255, 255, 0.25); color: #ffffff; font-size: 16px; font-weight: 600; padding: 12px 28px; border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 8px; cursor: pointer; transition: all 0.3s ease; backdrop-filter: blur(10px);"> Add Customers </a></div>
+    <p id="subtitle" style="font-size: 20px; color: #ffffff; margin: 0; transition: opacity 0.4s ease; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);">Manage your customer relationships and create powerful marketing campaigns that convert</p>
+   </div><!-- Main Content Area -->
+   <div id="content-area"><!-- Overview Page (Default) -->
+    <div id="overview-page"><!-- CTA Section -->
+     <div style="text-align: center; max-width: 700px; margin: 0 auto; background: rgba(255, 255, 255, 0.95); padding: 48px 40px; border-radius: 24px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); backdrop-filter: blur(10px);">
+      <h2 id="cta-heading" style="font-size: 40px; font-weight: 700; margin: 0 0 16px 0; color: #2d3748;">Start Growing Your Audience</h2>
+      <p id="cta-description" style="font-size: 18px; color: #4a5568; margin: 0 0 32px 0; line-height: 1.6;">Transform browsers into buyers and customers into champions. Our all-in-one marketing platform gives you everything you need to connect, engage, and convert.</p><a id="cta-button" class="cta-button" style="background: #a855f7; color: white; font-size: 20px; font-weight: 600; padding: 18px 48px; border: none; border-radius: 12px; cursor: pointer; display: inline-block; text-decoration: none;" href="/admin/ui/customers" data-view="/admin/ui/customers">Get Started</a>
+     </div>
+    </div>
+</div>
