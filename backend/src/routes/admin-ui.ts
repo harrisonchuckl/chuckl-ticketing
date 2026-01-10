@@ -4241,14 +4241,12 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12v4a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3 12l8-4 10 5-10 5-5-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 7.5 17 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       tabs: [
-        { key: 'overview', label: 'Overview', path: '/admin/ui/customers/overview', mount: customersOverview },
-        { key: 'customers', label: 'Customers', path: '/admin/ui/customers', mount: customers },
-        { key: 'marketing', label: 'Marketing', path: '/admin/ui/marketing', mount: marketingPage },
-        { key: 'imports', label: 'Imports & Exports', path: '/admin/ui/imports-exports', mount: importsExports },
-        { key: 'email', label: 'Email Campaigns', path: '/admin/ui/email', mount: emailPage },
-        { key: 'templates', label: 'Email Templates', path: '/admin/ui/email-templates', mount: emailTemplatesListPage },
-        { key: 'analytics', label: 'Insights', path: '/admin/ui/analytics', mount: analytics }
-      ]
+           { key: 'customers', label: 'Customers', path: '/admin/ui/customers/overview?tab=customers', mount: customersOverview },
+        { key: 'email', label: 'Email Campaigns', path: '/admin/ui/customers/overview?tab=email-campaigns', mount: customersOverview },
+        { key: 'social', label: 'Social Media Campaigns', path: '/admin/ui/customers/overview?tab=marketing', mount: customersOverview },
+        { key: 'imports', label: 'Imports & Exports', path: '/admin/ui/customers/overview?tab=imports', mount: customersOverview },
+        { key: 'add', label: 'Add Customers', path: '/admin/ui/customers/overview?tab=add-subscriber', mount: customersOverview }
+        ]
     },
     store: {
       title: 'Storefront & Orders',
@@ -4350,7 +4348,7 @@ router.get(
       labelHtml: 'Customers &amp;<br />Marketing',
       icon:
         '<svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
-      path: '/admin/ui/customers',
+      path: '/admin/ui/customers/overview',
       matchSection: 'customers'
     },
     {
@@ -4478,7 +4476,10 @@ router.get(
     var tabKey = null;
     Object.keys(NAV).some(function(key){
       var section = NAV[key];
-      var tab = section.tabs.find(function(item){ return item.path === normalized; });
+ var tab = section.tabs.find(function(item){
+        var basePath = String(item.path || '').split('?')[0];
+        return basePath === normalized;
+      });
       if (tab){
         sectionKey = key;
         tabKey = tab.key;
@@ -18914,6 +18915,19 @@ $('#ps_upsells_back').addEventListener('click', function(){ navigate('/admin/ui/
       });
     });
 
+
+    var initialTab = (options && options.tab) || (function(){
+      try {
+        return new URLSearchParams(location.search || '').get('tab');
+      } catch (e) {
+        return null;
+      }
+    })();
+    if (initialTab && sections[initialTab]) {
+      setTab(initialTab);
+    }
+
+
     async function fetchJson(url, opts){
       var res = await fetch(url, Object.assign({ credentials:'include' }, opts || {}));
       var data = {};
@@ -22902,26 +22916,365 @@ if (createButton && !createButton.dataset.bound){
     +'</div>';
 }
 
-  function customersOverview(){
-  if (!main) return;
-  main.innerHTML =
-    '<div class="card">'
-      +'<div class="header">'
-        +'<div>'
-          +'<div class="title">Customers & Marketing overview</div>'
-          +'<div class="muted">Access audience, campaigns, and insights.</div>'
-        +'</div>'
-      +'</div>'
-      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
-        +'<a class="btn" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>'
-        +'<a class="btn secondary" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing</a>'
-        +'<a class="btn secondary" href="/admin/ui/imports-exports" data-view="/admin/ui/imports-exports">Imports & Exports</a>'
-        +'<a class="btn secondary" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>'
-        +'<a class="btn secondary" href="/admin/ui/email-templates" data-view="/admin/ui/email-templates">Email Templates</a>'
-        +'<a class="btn secondary" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>'
-      +'</div>'
-    +'</div>';
+function customersOverview(options){
+if (!main) return;
+
+ ensureMarketingOverviewAssets();
+  main.innerHTML = '<div class="card"><div class="muted">Loading marketing overview...</div></div>';
+  fetch('/static/marketing-overview.html', { credentials: 'include' })
+    .then(function(res){ return res.text(); })
+    .then(function(html){
+      main.innerHTML = html;
+      initMarketingOverview(options || {});
+    })
+    .catch(function(){
+      main.innerHTML =
+        '<div class="card">'
+          +'<div class="title">Marketing overview</div>'
+          +'<div class="muted" style="margin-top:6px;">Unable to load the marketing overview content.</div>'
+        +'</div>';
+    });
 }
+
+function ensureMarketingOverviewAssets(){
+  if (document.getElementById('marketing-overview-font')) return;
+  var link = document.createElement('link');
+  link.id = 'marketing-overview-font';
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap';
+  document.head.appendChild(link);
+}
+
+function addCustomersOverview(){
+  customersOverview({ tab: 'add-subscriber' });
+}
+
+function initMarketingOverview(options){
+  if (!main) return;
+  var container = main.querySelector('.marketing-overview');
+  if (!container) return;
+
+  var tabs = Array.prototype.slice.call(container.querySelectorAll('.nav-tab'));
+  var header = container.querySelector('#main-title');
+  var subtitle = container.querySelector('#subtitle');
+  var ctaButton = container.querySelector('#cta-button');
+  var pages = {
+    overview: container.querySelector('#overview-page'),
+    customers: container.querySelector('#customers-page'),
+    marketing: container.querySelector('#marketing-page'),
+    imports: container.querySelector('#imports-page'),
+    'add-subscriber': container.querySelector('#add-subscriber-page'),
+    'email-campaigns': container.querySelector('#email-campaigns-page')
+  };
+
+  var headerTexts = {
+    customers: 'Every customer has a story worth knowing',
+    marketing: 'Social media magic is about to happen',
+    imports: 'Data migration without the migraine',
+    'add-subscriber': 'Add customers one at a time',
+    'email-campaigns': 'Emails that get opened, not ignored',
+    overview: 'Intelligent Marketing and Powerful Automations'
+  };
+
+  var subtitleTexts = {
+    customers: 'Access comprehensive customer profiles, purchase history, and engagement metrics in one centralized dashboard',
+    marketing: 'Create, schedule, and optimize social media campaigns across all your platforms from one central hub',
+    imports: 'Customer data automatically updates when you sell tickets and products via TixAll. We recommend using our services fully to get the best understanding of your customers and to get closer to them. If however you have external customer data and you would like to upload it here, then please use the upload buttons below. Alternatively, you can export customer data. Please ensure that you have the right permissions from customers before you proceed with this.',
+    'add-subscriber': 'Manually add individual customers or subscribers to your database with comprehensive profile information, ticket details, show associations, and venue preferences.',
+    'email-campaigns': 'Instead of creating an email campaign that goes out to all your customers, create automations that mean every customer gets bespoke emails that are tailored to them.',
+    overview: 'Manage your customer relationships and create powerful marketing campaigns that convert'
+  };
+
+  function setHeaderText(pageName){
+    if (!header || !subtitle) return;
+    var newText = headerTexts[pageName] || headerTexts.overview;
+    var newSubtitle = subtitleTexts[pageName] || subtitleTexts.overview;
+    header.style.opacity = '0';
+    subtitle.style.opacity = '0';
+    setTimeout(function(){
+      header.textContent = newText;
+      subtitle.textContent = newSubtitle;
+      header.style.opacity = '1';
+      subtitle.style.opacity = '1';
+    }, 400);
+  }
+
+  function showPage(pageName){
+    Object.keys(pages).forEach(function(key){
+      if (!pages[key]) return;
+      pages[key].style.display = (key === pageName) ? 'block' : 'none';
+    });
+    setHeaderText(pageName);
+  }
+
+  function setActiveTab(tabName){
+    tabs.forEach(function(tab){
+      tab.classList.toggle('active', tab.dataset.page === tabName);
+    });
+  }
+
+  tabs.forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var page = tab.dataset.page || 'overview';
+      setActiveTab(page);
+      var messages = {
+        customers: '✓ Loading Customers...',
+        marketing: '✓ Loading Social Media Campaigns...',
+        imports: '✓ Loading Imports & Exports...',
+        'add-subscriber': '✓ Loading Form...',
+        'email-campaigns': '✓ Loading Email Campaigns...'
+      };
+      var originalText = tab.textContent;
+      if (messages[page]) {
+        tab.textContent = messages[page];
+      }
+      setTimeout(function(){
+        tab.textContent = originalText;
+        showPage(page);
+        try{
+          var url = new URL(window.location.href);
+          url.searchParams.set('tab', page);
+          history.replaceState(null, '', url.toString());
+        }catch(e){}
+      }, 800);
+    });
+  });
+
+  if (ctaButton) {
+    ctaButton.addEventListener('click', function(){
+      var originalText = ctaButton.textContent;
+      ctaButton.textContent = '✓ Let\\'s Go!';
+      ctaButton.style.background = '#ec4899';
+      ctaButton.style.color = 'white';
+      setTimeout(function(){
+        ctaButton.textContent = originalText;
+        ctaButton.style.background = '#a855f7';
+        ctaButton.style.color = 'white';
+      }, 1500);
+    });
+  }
+
+  var startTab = options.tab;
+  if (!startTab) {
+    try{
+      startTab = new URLSearchParams(window.location.search || '').get('tab');
+    }catch(e){
+      startTab = null;
+    }
+  }
+  if (!pages[startTab]) startTab = 'overview';
+  setActiveTab(startTab);
+  showPage(startTab);
+  hydrateMarketingOverviewCustomers(container);
+}
+
+function hydrateMarketingOverviewCustomers(container){
+  var tbody = container.querySelector('#customerTableBody');
+  if (!tbody) return;
+  var emptyState = container.querySelector('#customerEmpty');
+  var dateFilterLabel = container.querySelector('#dateFilterLabel');
+  var dateFilterMenu = container.querySelector('#dateFilterMenu');
+  var dateFilterTrigger = container.querySelector('#dateFilterTrigger');
+  var dateFrom = container.querySelector('#dateFrom');
+  var dateTo = container.querySelector('#dateTo');
+  var applyCustomDate = container.querySelector('#applyCustomDate');
+  var clearDateFilter = container.querySelector('#clearDateFilter');
+  var sortHeaders = Array.prototype.slice.call(container.querySelectorAll('[data-sort]'));
+
+  var customers = [];
+  var filteredCustomers = [];
+  var currentSort = { field: null, direction: 'desc' };
+  var dateFilter = { type: null, from: null, to: null };
+
+  function renderCustomers(){
+    var currency = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
+    if (!filteredCustomers.length){
+      tbody.innerHTML = '';
+      if (emptyState) emptyState.style.display = 'block';
+      return;
+    }
+    if (emptyState) emptyState.style.display = 'none';
+    tbody.innerHTML = filteredCustomers.map(function(customer){
+      var loyaltyClass = String(customer.loyalty || '').toLowerCase();
+      return ''
+        + '<tr style="border-bottom: 1px solid #e2e8f0;">'
+        +   '<td style="padding: 12px 16px;">'
+        +     '<div style="font-weight: 700;">' + escapeHtml(customer.name || 'Unknown') + '</div>'
+        +     '<div style="font-size: 12px; color: #718096;">'
+        +       (customer.loyalty ? ('<span class="loyalty ' + escapeHtml(loyaltyClass) + '">' + escapeHtml(customer.loyalty) + '</span>') : '')
+        +     '</div>'
+        +   '</td>'
+        +   '<td style="padding: 12px 16px;">' + escapeHtml(customer.id || '-') + '</td>'
+        +   '<td style="padding: 12px 16px;">'
+        +     escapeHtml(customer.email || '-') + '<br/>'
+        +     '<span style="font-size: 12px; color: #718096;">' + escapeHtml(customer.phone || '') + '</span>'
+        +   '</td>'
+        +   '<td style="padding: 12px 16px;">' + escapeHtml(String(customer.totalOrders || 0)) + '</td>'
+        +   '<td style="padding: 12px 16px;">' + escapeHtml(String(customer.totalTickets || 0)) + '</td>'
+        +   '<td style="padding: 12px 16px;">' + escapeHtml(String(customer.shows || customer.showsBought || 0)) + ' show' + ((customer.shows || customer.showsBought || 0) === 1 ? '' : 's') + '</td>'
+        +   '<td style="padding: 12px 16px;">' + escapeHtml(currency.format(customer.totalSpend || 0)) + '</td>'
+        +   '<td style="padding: 12px 16px;">' + escapeHtml(customer.lastPurchaseLabel || '-') + '</td>'
+        +   '<td style="padding: 12px 16px;">' + escapeHtml(customer.lastShow || '-') + '</td>'
+        +   '<td style="padding: 12px 16px;">'
+        +     '<div class="kebab">'
+        +       '<button class="btn" data-kebab="' + escapeHtml(customer.id || '') + '" style="font-size: 18px; padding: 4px 10px;">⋮</button>'
+        +       '<div class="menu" data-menu="' + escapeHtml(customer.id || '') + '">'
+        +         '<a href="/admin/ui/customers" data-view="/admin/ui/customers">Open profile</a>'
+        +       '</div>'
+        +     '</div>'
+        +   '</td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  function updateSortIcons(field){
+    sortHeaders.forEach(function(header){
+      var icon = header.querySelector('svg');
+      if (!icon) return;
+      var active = header.dataset.sort === field;
+      icon.style.opacity = active ? '1' : '0.3';
+      if (active) {
+        icon.style.transform = currentSort.direction === 'desc' ? 'rotate(0deg)' : 'rotate(180deg)';
+      } else {
+        icon.style.transform = 'rotate(0deg)';
+      }
+    });
+  }
+
+  function sortCustomers(field){
+    if (currentSort.field === field) {
+      currentSort.direction = currentSort.direction === 'desc' ? 'asc' : 'desc';
+    } else {
+      currentSort.field = field;
+      currentSort.direction = 'desc';
+    }
+    filteredCustomers.sort(function(a, b){
+      var aVal = a[field];
+      var bVal = b[field];
+      if (field === 'lastPurchase') {
+        aVal = new Date(aVal || 0);
+        bVal = new Date(bVal || 0);
+      }
+      if (currentSort.direction === 'desc') return aVal > bVal ? -1 : 1;
+      return aVal > bVal ? 1 : -1;
+    });
+    updateSortIcons(field);
+    renderCustomers();
+  }
+
+  function applyDateFilter(){
+    if (!dateFilter.type && !dateFilter.from) {
+      filteredCustomers = customers.slice();
+      renderCustomers();
+      return;
+    }
+    var fromDate = null;
+    var toDate = new Date();
+    if (dateFilter.type) {
+      toDate = new Date();
+      toDate.setHours(23, 59, 59, 999);
+      fromDate = new Date();
+      fromDate.setDate(toDate.getDate() - parseInt(dateFilter.type, 10));
+      fromDate.setHours(0, 0, 0, 0);
+    } else if (dateFilter.from && dateFilter.to) {
+      fromDate = new Date(dateFilter.from);
+      fromDate.setHours(0, 0, 0, 0);
+      toDate = new Date(dateFilter.to);
+      toDate.setHours(23, 59, 59, 999);
+    }
+    filteredCustomers = customers.filter(function(customer){
+      var purchaseDate = new Date((customer.lastPurchase || '') + 'T12:00:00');
+      return purchaseDate >= fromDate && purchaseDate <= toDate;
+    });
+    renderCustomers();
+  }
+
+  function attachDateFilters(){
+    if (dateFilterTrigger && dateFilterMenu) {
+      dateFilterTrigger.addEventListener('click', function(){
+        dateFilterMenu.classList.toggle('open');
+      });
+    }
+    Array.prototype.slice.call(container.querySelectorAll('[data-date-filter]')).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var value = btn.getAttribute('data-date-filter');
+        dateFilter = { type: value, from: null, to: null };
+        if (dateFilterLabel) dateFilterLabel.textContent = btn.textContent || 'Date filter';
+        applyDateFilter();
+      });
+    });
+    if (applyCustomDate) {
+      applyCustomDate.addEventListener('click', function(){
+        dateFilter = { type: null, from: dateFrom ? dateFrom.value : null, to: dateTo ? dateTo.value : null };
+        if (dateFilterLabel) dateFilterLabel.textContent = 'Custom range';
+        applyDateFilter();
+      });
+    }
+    if (clearDateFilter) {
+      clearDateFilter.addEventListener('click', function(){
+        dateFilter = { type: null, from: null, to: null };
+        if (dateFilterLabel) dateFilterLabel.textContent = 'Date filter';
+        applyDateFilter();
+      });
+    }
+  }
+
+  function attachSort(){
+    sortHeaders.forEach(function(header){
+      header.addEventListener('click', function(){
+        sortCustomers(header.dataset.sort);
+      });
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    if (!e.target) return;
+    if (e.target.matches('[data-kebab]')) {
+      e.stopPropagation();
+      var customerId = e.target.dataset.kebab;
+      var menu = container.querySelector('[data-menu=\"' + customerId + '\"]');
+      Array.prototype.slice.call(container.querySelectorAll('.kebab .menu')).forEach(function(m){
+        if (m !== menu) m.classList.remove('open');
+      });
+      if (menu) menu.classList.toggle('open');
+    } else {
+      Array.prototype.slice.call(container.querySelectorAll('.kebab .menu')).forEach(function(m){
+        m.classList.remove('open');
+      });
+    }
+  });
+
+  attachDateFilters();
+  attachSort();
+
+  fetch('/admin/customers', { credentials: 'include' })
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      var items = (data && (data.items || data.customers || data.data)) || [];
+      if (!Array.isArray(items)) items = [];
+      customers = items.map(function(c){
+        return {
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          totalOrders: c.totalOrders || 0,
+          totalTickets: c.totalTickets || 0,
+          shows: c.showsBought || 0,
+          totalSpend: c.totalSpend || 0,
+          lastPurchase: c.lastPurchase ? String(c.lastPurchase).slice(0, 10) : null,
+          lastPurchaseLabel: c.lastPurchase ? new Date(c.lastPurchase).toLocaleDateString('en-GB') : null,
+          lastShow: c.lastShow || null,
+          loyalty: c.loyalty || null
+        };
+      });
+      filteredCustomers = customers.slice();
+      renderCustomers();
+    })
+    .catch(function(){
+      renderCustomers();
+    });
+    }
 
   function storeOverview(){
   if (!main) return;
@@ -24449,6 +24802,7 @@ if (createButton && !createButton.dataset.bound){
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/storefront')   return storefrontPage();
       if (path === '/admin/ui/customers')     return customers();
+      if (path === '/admin/ui/customers/add') return addCustomersOverview();
       if (path === '/admin/ui/orders')         return orders();
       if (path === '/admin/ui/venues')         return venues();
       if (path === '/admin/ui/promoters')      return promotersList();
