@@ -4241,14 +4241,13 @@ router.get(
       icon:
         '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12v4a2 2 0 0 0 2 2h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3 12l8-4 10 5-10 5-5-2.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 7.5 17 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
       tabs: [
-        { key: 'overview', label: 'Overview', path: '/admin/ui/customers/overview', mount: customersOverview },
         { key: 'customers', label: 'Customers', path: '/admin/ui/customers', mount: customers },
-        { key: 'marketing', label: 'Marketing', path: '/admin/ui/marketing', mount: marketingPage },
-        { key: 'imports', label: 'Imports & Exports', path: '/admin/ui/imports-exports', mount: importsExports },
         { key: 'email', label: 'Email Campaigns', path: '/admin/ui/email', mount: emailPage },
-        { key: 'templates', label: 'Email Templates', path: '/admin/ui/email-templates', mount: emailTemplatesListPage },
-        { key: 'analytics', label: 'Insights', path: '/admin/ui/analytics', mount: analytics }
-      ]
+       { key: 'social', label: 'Social Media Campaigns', path: '/admin/ui/marketing', mount: marketingPage },
+        { key: 'imports', label: 'Imports & Exports', path: '/admin/ui/imports-exports', mount: importsExports },
+        { key: 'add', label: 'Add Customers', path: '/admin/ui/customers/add', mount: addCustomersOverview }
+        
+            ]
     },
     store: {
       title: 'Storefront & Orders',
@@ -18914,6 +18913,18 @@ $('#ps_upsells_back').addEventListener('click', function(){ navigate('/admin/ui/
       });
     });
 
+   var initialTab = (options && options.tab) || (function(){
+      try {
+        return new URLSearchParams(location.search || '').get('tab');
+      } catch (e) {
+        return null;
+      }
+    })();
+    if (initialTab && sections[initialTab]) {
+      setTab(initialTab);
+    }
+    
+
     async function fetchJson(url, opts){
       var res = await fetch(url, Object.assign({ credentials:'include' }, opts || {}));
       var data = {};
@@ -22902,26 +22913,40 @@ if (createButton && !createButton.dataset.bound){
     +'</div>';
 }
 
-  function customersOverview(){
-  if (!main) return;
-  main.innerHTML =
-    '<div class="card">'
-      +'<div class="header">'
-        +'<div>'
-          +'<div class="title">Customers & Marketing overview</div>'
-          +'<div class="muted">Access audience, campaigns, and insights.</div>'
-        +'</div>'
-      +'</div>'
-      +'<div class="row" style="flex-wrap:wrap;gap:10px;">'
-        +'<a class="btn" href="/admin/ui/customers" data-view="/admin/ui/customers">Customers</a>'
-        +'<a class="btn secondary" href="/admin/ui/marketing" data-view="/admin/ui/marketing">Marketing</a>'
-        +'<a class="btn secondary" href="/admin/ui/imports-exports" data-view="/admin/ui/imports-exports">Imports & Exports</a>'
-        +'<a class="btn secondary" href="/admin/ui/email" data-view="/admin/ui/email">Email Campaigns</a>'
-        +'<a class="btn secondary" href="/admin/ui/email-templates" data-view="/admin/ui/email-templates">Email Templates</a>'
-        +'<a class="btn secondary" href="/admin/ui/analytics" data-view="/admin/ui/analytics">Insights</a>'
-      +'</div>'
-    +'</div>';
+function customersOverview(){
+if (!main) return;
+ ensureMarketingOverviewAssets();
+  main.innerHTML = '<div class="card"><div class="muted">Loading marketing overview...</div></div>';
+  fetch('/static/marketing-overview.html', { credentials: 'include' })
+    .then(function(res){ return res.text(); })
+    .then(function(html){
+      main.innerHTML = html;
+    })
+    .catch(function(){
+      main.innerHTML =
+        '<div class="card">'
+          +'<div class="title">Marketing overview</div>'
+          +'<div class="muted" style="margin-top:6px;">Unable to load the marketing overview content.</div>'
+        +'</div>';
+    });
 }
+
+function ensureMarketingOverviewAssets(){
+  if (document.getElementById('marketing-overview-font')) return;
+  var link = document.createElement('link');
+  link.id = 'marketing-overview-font';
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap';
+  document.head.appendChild(link);
+}
+
+function addCustomersOverview(){
+  marketingPage({
+    title: 'Add Customers',
+    subtitle: 'Add and manage customer profiles for marketing outreach.',
+    tab: 'contacts',
+  });
+  }
 
   function storeOverview(){
   if (!main) return;
@@ -24449,6 +24474,7 @@ if (createButton && !createButton.dataset.bound){
       if (path === '/admin/ui/shows/current')  return listShows();
       if (path === '/admin/ui/storefront')   return storefrontPage();
       if (path === '/admin/ui/customers')     return customers();
+      if (path === '/admin/ui/customers/add') return addCustomersOverview();
       if (path === '/admin/ui/orders')         return orders();
       if (path === '/admin/ui/venues')         return venues();
       if (path === '/admin/ui/promoters')      return promotersList();
