@@ -16303,7 +16303,7 @@ function productStorePage(mountNode, options){
       +       '<div class="ps-section-title">Unable to load product store</div>'
       +       '<div class="ps-section-desc" id="ps_error_message" style="margin-bottom:16px;">We hit an error loading product store data.</div>'
       +       '<button class="ps-nav-btn" id="ps_retry">Retry</button>'
-             '</div>'
+      +     '</div>'
       +     '<div id="ps_cta" class="ps-section-card" style="display:none;">'
       +       '<div class="ps-section-title">Create your storefront</div>'
       +       '<div class="ps-section-desc">Add a slug, branding, and tax/fulfilment defaults to start selling products.</div>'
@@ -16319,8 +16319,7 @@ function productStorePage(mountNode, options){
       +         '<div class="ps-form-label">Product coverage</div>'
       +         '<div class="ps-section-title" style="font-size:20px;margin:0;" id="ps_product_counts">0 active products</div>'
       +         '<div class="ps-section-desc" style="margin-top:8px;" id="ps_product_counts_detail">0 drafts · 0 archived</div>'
-      +       '</div>      
-'</div>'
+      +       '</div>'
       +       '<div class="ps-section-card">'
       +         '<div class="ps-form-label">Add-on attach rate</div>'
       +         '<div class="ps-section-title" style="font-size:20px;margin:0;" id="ps_attach_rate">0%</div>'
