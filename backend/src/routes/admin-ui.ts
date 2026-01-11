@@ -3992,6 +3992,32 @@ router.get(
     </main>
   </div>
   <div id="adminToast" class="toast" role="status" aria-live="polite"></div>
+<script>
+    window.__adminUiBootErrors = [];
+    window.addEventListener('error', function(event){
+      window.__adminUiBootErrors.push({
+        type: 'error',
+        message: event && event.message ? event.message : 'Unknown error',
+        source: event && event.filename ? event.filename : '',
+        line: event && event.lineno ? event.lineno : null,
+        column: event && event.colno ? event.colno : null
+      });
+      try{
+        if (document.getElementById('adminBootError')) return;
+        var banner = document.createElement('div');
+        banner.id = 'adminBootError';
+        banner.style.cssText = 'position:fixed;bottom:16px;left:16px;right:16px;z-index:9999;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;padding:12px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 20px rgba(15,23,42,0.12);';
+        banner.textContent = 'Admin UI error: ' + (event && event.message ? event.message : 'Unknown error') + ' (line ' + (event && event.lineno ? event.lineno : '?') + ', col ' + (event && event.colno ? event.colno : '?') + ').';
+        document.body.appendChild(banner);
+      }catch(_err){}
+    });
+    window.addEventListener('unhandledrejection', function(event){
+      window.__adminUiBootErrors.push({
+        type: 'unhandledrejection',
+        message: event && event.reason ? String(event.reason) : 'Unknown rejection'
+      });
+    });
+  </script>
 
 <script>
 (function(){
@@ -16289,12 +16315,13 @@ function productStorePage(mountNode, options){
       +         '<div class="ps-section-title" style="font-size:20px;margin:0;" id="ps_storefront_url">—</div>'
       +         '<div class="ps-section-desc" style="margin-top:8px;" id="ps_storefront_status">Status: —</div>'
       +       '</div>'
-              '<div class="ps-section-card">'
-      +         '<div class="ps-form-label">Product coverage</div>'      +         '<div class="ps-section-title" style="font-size:20px;margin:0;" id="ps_product_counts">0 active products</div>'
+      +       '<div class="ps-section-card">'
+      +         '<div class="ps-form-label">Product coverage</div>'
+      +         '<div class="ps-section-title" style="font-size:20px;margin:0;" id="ps_product_counts">0 active products</div>'
       +         '<div class="ps-section-desc" style="margin-top:8px;" id="ps_product_counts_detail">0 drafts · 0 archived</div>'
       +       '</div>      
-      +       '<div class="ps-section-card">      
-      +         '<div class="ps-form-label">Add-on attach rate</div>'
+'</div>'
+      +       '<div class="ps-section-card">'
       +         '<div class="ps-form-label">Add-on attach rate</div>'
       +         '<div class="ps-section-title" style="font-size:20px;margin:0;" id="ps_attach_rate">0%</div>'
       +         '<div class="ps-section-desc" style="margin-top:8px;">Last 30 days</div>'
